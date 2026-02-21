@@ -1609,6 +1609,7 @@ if __name__ == "__main__":
     if _transport == "sse":
         mcp.settings.host = _os.environ.get("MCP_HOST", "0.0.0.0")
         mcp.settings.port = int(_os.environ.get("MCP_PORT", "8083"))
+        mcp.settings.transport_security.enable_dns_rebinding_protection = False
         mcp.run(transport="sse")
     else:
         mcp.run()
