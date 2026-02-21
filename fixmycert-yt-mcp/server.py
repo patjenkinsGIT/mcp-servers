@@ -2559,10 +2559,8 @@ if __name__ == "__main__":
     import os as _os
     _transport = _os.environ.get("MCP_TRANSPORT", "stdio")
     if _transport == "sse":
-        mcp.run(
-            transport="sse",
-            host=_os.environ.get("MCP_HOST", "0.0.0.0"),
-            port=int(_os.environ.get("MCP_PORT", "8082")),
-        )
+        mcp.settings.host = _os.environ.get("MCP_HOST", "0.0.0.0")
+        mcp.settings.port = int(_os.environ.get("MCP_PORT", "8082"))
+        mcp.run(transport="sse")
     else:
         mcp.run()
