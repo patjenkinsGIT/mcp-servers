@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  fixmycert-content:
+    build:
+      context: ./fixmycert-content-mcp
+      dockerfile: ../Dockerfile.mcp
+    container_name: fixmycert-content-mcp
+    ports:
+      - "8081:8081"
+    volumes:
+      - fixmycert-content-data:/data
+    environment:
+      - MCP_TRANSPORT=sse
+      - MCP_PORT=8081
+      - MCP_HOST=0.0.0.0
+      - DATA_DIR=/data
+    restart: unless-stopped
+    command: ["python", "fixmycert_content_mcp.py"]
+
+  fixmycert-yt:
+    build:
+      context: ./fixmycert-yt-mcp
+      dockerfile: ../Dockerfile.mcp
+    container_name: fixmycert-yt-mcp
+    ports:
+      - "8082:8082"
+    volumes:
+      - fixmycert-yt-data:/data
+    environment:
+      - MCP_TRANSPORT=sse
+      - MCP_PORT=8082
+      - MCP_HOST=0.0.0.0
+      - DATA_DIR=/data
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+    restart: unless-stopped
+
+  myrobotictrader:
+    build:
+      context: ./myrobotictrader-mcp
+      dockerfile: ../Dockerfile.mcp
+    container_name: myrobotictrader-mcp
+    ports:
+      - "8083:8083"
+    env_file:
+      - ./myrobotictrader-mcp/.env
+    environment:
+      - MCP_TRANSPORT=sse
+      - MCP_PORT=8083
+      - MCP_HOST=0.0.0.0
+    restart: unless-stopped
+
+volumes:
+  fixmycert-content-data:
+    name: fixmycert-content-data
+  fixmycert-yt-data:
+    name: fixmycert-yt-data

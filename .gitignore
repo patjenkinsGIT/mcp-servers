@@ -1,0 +1,10 @@
+.env
+myrobotictrader-mcp/.env
+myrobotictrader-mcp/credentials.json
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+.vscode/
+.idea/
