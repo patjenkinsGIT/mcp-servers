@@ -50,8 +50,24 @@ services:
       - MCP_HOST=0.0.0.0
     restart: unless-stopped
 
+myrobotictrader-content:
+  build: ./myrobotictrader-content-mcp
+  container_name: myrobotictrader-content-mcp
+  ports:
+    - "8084:8084"
+  environment:
+    - MCP_TRANSPORT=sse
+    - MCP_HOST=0.0.0.0
+    - MCP_PORT=8084
+    - DATA_DIR=/data
+  volumes:
+    - myrobotictrader-content-data:/data
+  restart: unless-stopped
+
 volumes:
   fixmycert-content-data:
     name: fixmycert-content-data
   fixmycert-yt-data:
     name: fixmycert-yt-data
+  myrobotictrader-content-data:
+    name: myrobotictrader-content-data
