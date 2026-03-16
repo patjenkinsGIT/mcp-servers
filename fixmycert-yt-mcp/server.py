@@ -32,6 +32,7 @@ BACKUP_DIR = DATA_DIR / "backup"
 
 YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
+YOUTUBE_OAUTH_TOKEN = os.environ.get("YOUTUBE_OAUTH_TOKEN", "")
 
 CATEGORIES = [
     "compliance", "certificates", "troubleshooting", "enterprise",
@@ -1609,6 +1610,36 @@ async def _yt_api_get(endpoint: str, params: dict) -> dict:
         return resp.json()
 
 
+def _check_oauth_token() -> str | None:
+    """Return OAuth token or None if not set."""
+    token = os.environ.get("YOUTUBE_OAUTH_TOKEN", "")
+    return token if token else None
+
+
+async def _yt_api_put(endpoint: str, params: dict, body: dict) -> dict:
+    """Make a YouTube Data API PUT request (requires OAuth2 token)."""
+    token = _check_oauth_token()
+    if not token:
+        raise ValueError(
+            "YOUTUBE_OAUTH_TOKEN environment variable not set. "
+            "Write operations require an OAuth2 bearer token. "
+            "Set it and restart the server."
+        )
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.put(
+            f"{YOUTUBE_API_BASE}/{endpoint}",
+            params=params,
+            json=body,
+            headers=headers,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def _fetch_channel_videos(channel_id: str = None) -> list[dict]:
     """Fetch all videos from the channel using the YouTube Data API.
 
@@ -1693,6 +1724,21 @@ class ChannelStatsInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     channel_id: Optional[str] = Field(default=None, description="YouTube channel ID. If not provided, searches for 'FixMyCert'.")
+
+
+class UpdateDescriptionInput(BaseModel):
+    """Input for appending a link to a video's YouTube description."""
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    video_id: str = Field(..., description="YouTube video ID to update")
+    append_text: str = Field(..., description="Text to append to the 🎬 Related Videos section (e.g., 'mTLS Explained: https://youtu.be/abc123')", min_length=1, max_length=500)
+
+
+class PushAllCrosslinksInput(BaseModel):
+    """Input for pushing all pending cross-link suggestions to YouTube."""
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    dry_run: bool = Field(default=False, description="If true, show what would be pushed without making changes")
 
 
 # ============================================================
@@ -2547,6 +2593,329 @@ async def yt_get_post_calendar(params: PostCalendarInput) -> str:
         lines.append("\n💡 **Suggestion:** Good start! Try to hit 2-3 posts/week consistently.")
     else:
         lines.append("\n✅ Great posting cadence! Keep it up.")
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# Tools — YouTube Description Updates
+# ============================================================
+
+
+def _find_or_create_related_section(description: str) -> tuple[str, int]:
+    """Find the '🎬 Related Videos:' section in a description.
+
+    Returns (description, insertion_index) where insertion_index is the
+    character offset where new links should be appended.
+    If the section doesn't exist, it is created at the end.
+    """
+    marker = "🎬 Related Videos:"
+    idx = description.find(marker)
+    if idx == -1:
+        # Create the section at the end
+        description = description.rstrip() + "\n\n" + marker + "\n"
+        return description, len(description)
+
+    # Find the end of the section — either the next blank line followed by
+    # another section header, or the end of the description
+    after_marker = idx + len(marker)
+    lines = description[after_marker:].split("\n")
+    insert_pos = after_marker
+    for line in lines:
+        insert_pos += len(line) + 1  # +1 for the newline
+        stripped = line.strip()
+        # Stop if we hit an empty line followed by another section (non-link text)
+        if stripped == "":
+            # Peek ahead — if next non-empty line doesn't look like a link, stop
+            remaining = description[insert_pos:].lstrip("\n")
+            if remaining and not remaining.startswith("http") and not remaining.startswith("▶") and "youtu" not in remaining[:80].lower():
+                break
+    return description, insert_pos
+
+
+@mcp.tool(
+    name="yt_update_description",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True},
+)
+async def yt_update_description(params: UpdateDescriptionInput) -> str:
+    """Append a link to a video's 🎬 Related Videos section on YouTube.
+
+    Fetches the current description via YouTube Data API, finds or creates
+    the 🎬 Related Videos: section, appends the new link, and pushes
+    the update back via videos.update. Automatically marks matching
+    cross-link entries as resolved in the local update queue.
+
+    Requires YOUTUBE_API_KEY (read) and YOUTUBE_OAUTH_TOKEN (write).
+
+    Args:
+        params: video_id and append_text (the link line to add)
+
+    Returns:
+        str: Confirmation with before/after description lengths
+    """
+    if not _check_api_key():
+        return "❌ YOUTUBE_API_KEY environment variable not set."
+    if not _check_oauth_token():
+        return "❌ YOUTUBE_OAUTH_TOKEN environment variable not set. Write operations require OAuth2."
+
+    video_id = _extract_video_id(params.video_id)
+
+    # Fetch current video from YouTube
+    try:
+        details = await _fetch_video_details([video_id])
+    except Exception as e:
+        return f"❌ YouTube API error fetching video: {e}"
+
+    if not details:
+        return f"❌ Video {video_id} not found on YouTube."
+
+    detail = details[0]
+    snippet = detail.get("snippet", {})
+    current_desc = snippet.get("description", "")
+    title = snippet.get("title", video_id)
+    category_id = snippet.get("categoryId", "22")
+
+    # Check if link already exists in description
+    if params.append_text.strip() in current_desc:
+        return f"⚠️ Link already exists in description for **{title}**. No changes made."
+
+    # Find or create the Related Videos section and insert
+    updated_desc, insert_pos = _find_or_create_related_section(current_desc)
+    new_line = params.append_text.strip() + "\n"
+    updated_desc = updated_desc[:insert_pos] + new_line + updated_desc[insert_pos:]
+
+    # Push update to YouTube
+    try:
+        await _yt_api_put("videos", {"part": "snippet"}, {
+            "id": video_id,
+            "snippet": {
+                "title": title,
+                "description": updated_desc,
+                "categoryId": category_id,
+            },
+        })
+    except httpx.HTTPStatusError as e:
+        return f"❌ YouTube API error updating description: {e.response.status_code} — {e.response.text}"
+    except Exception as e:
+        return f"❌ YouTube API error: {e}"
+
+    # Update local records
+    videos = _read_json(VIDEOS_FILE)
+    video = _find_video(videos, video_id)
+    if video:
+        video["description"] = updated_desc
+        video["yt_description"] = updated_desc
+        video["updated_at"] = _now_iso()
+        _write_json(VIDEOS_FILE, videos)
+
+    # Auto-resolve matching update queue entries for this video
+    queue = _read_json(UPDATE_QUEUE_FILE)
+    resolved_count = 0
+    for q in queue:
+        if q["video_id"] == video_id and not q.get("resolved"):
+            if "cross-link" in q.get("reason", "").lower() or "crosslink" in q.get("reason", "").lower():
+                q["resolved"] = True
+                q["resolved_at"] = _now_iso()
+                resolved_count += 1
+    if resolved_count:
+        _write_json(UPDATE_QUEUE_FILE, queue)
+
+    lines = [
+        f"✅ Updated description for **{title}**",
+        f"  Added: {params.append_text.strip()}",
+        f"  Description: {len(current_desc)} → {len(updated_desc)} chars",
+    ]
+    if resolved_count:
+        lines.append(f"  Auto-resolved {resolved_count} cross-link queue item(s)")
+    return "\n".join(lines)
+
+
+@mcp.tool(
+    name="yt_push_all_crosslinks",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True},
+)
+async def yt_push_all_crosslinks(params: PushAllCrosslinksInput) -> str:
+    """Push all pending cross-link suggestions to YouTube descriptions in one call.
+
+    Reads all videos, identifies cross-link suggestions that are not yet in the
+    YouTube description, appends them to each video's 🎬 Related Videos: section,
+    and marks everything as resolved locally.
+
+    Requires YOUTUBE_API_KEY (read) and YOUTUBE_OAUTH_TOKEN (write).
+
+    Args:
+        params: dry_run — if true, preview changes without pushing
+
+    Returns:
+        str: Summary of all updates pushed (or previewed)
+    """
+    if not _check_api_key():
+        return "❌ YOUTUBE_API_KEY environment variable not set."
+    if not params.dry_run and not _check_oauth_token():
+        return "❌ YOUTUBE_OAUTH_TOKEN environment variable not set. Write operations require OAuth2."
+
+    videos = _read_json(VIDEOS_FILE)
+    if not videos:
+        return "No videos in database."
+
+    # Build lookup for titles
+    id_to_video = {v["id"]: v for v in videos}
+
+    # For each video, find cross-link suggestions that aren't already in its description
+    pending_updates: list[dict] = []
+
+    for video in videos:
+        video_id = video["id"]
+        target_tags = set(t.lower() for t in video.get("tags", []))
+        target_cat = (video.get("category") or "").lower()
+        if not target_tags and not target_cat:
+            continue
+
+        # Find suggested cross-links (same logic as yt_suggest_crosslinks)
+        links_to_add = []
+        for other in videos:
+            if other["id"] == video_id:
+                continue
+
+            score = 0
+            other_tags = set(t.lower() for t in other.get("tags", []))
+            shared = target_tags & other_tags
+            if shared:
+                score += len(shared) * 2
+            other_cat = (other.get("category") or "").lower()
+            if other_cat and other_cat == target_cat:
+                score += 1
+
+            if score <= 0:
+                continue
+
+            # Check if already in related_videos
+            existing_related_ids = [r["video_id"] for r in video.get("related_videos", [])]
+            if other["id"] in existing_related_ids:
+                continue
+
+            links_to_add.append({
+                "video_id": other["id"],
+                "title": other["title"],
+                "url": _canonical_url(other["id"]),
+                "score": score,
+            })
+
+        if links_to_add:
+            links_to_add.sort(key=lambda x: x["score"], reverse=True)
+            pending_updates.append({
+                "video_id": video_id,
+                "title": video["title"],
+                "links": links_to_add,
+            })
+
+    if not pending_updates:
+        return "🎉 No pending cross-links to push. All videos are fully linked."
+
+    # Dry run — just show what would be updated
+    if params.dry_run:
+        lines = [f"## 🔍 Dry Run — {sum(len(u['links']) for u in pending_updates)} links across {len(pending_updates)} videos\n"]
+        for update in pending_updates:
+            lines.append(f"### {update['title']}")
+            for link in update["links"]:
+                lines.append(f"  + {link['title']}: {link['url']} (score: {link['score']})")
+            lines.append("")
+        return "\n".join(lines)
+
+    # Fetch all target video descriptions from YouTube in one batch
+    target_ids = [u["video_id"] for u in pending_updates]
+    try:
+        yt_details = await _fetch_video_details(target_ids)
+    except Exception as e:
+        return f"❌ YouTube API error fetching videos: {e}"
+
+    yt_lookup = {d["id"]: d for d in yt_details}
+
+    pushed = []
+    errors = []
+    queue = _read_json(UPDATE_QUEUE_FILE)
+
+    for update in pending_updates:
+        vid = update["video_id"]
+        yt_detail = yt_lookup.get(vid)
+        if not yt_detail:
+            errors.append(f"{update['title']}: not found on YouTube")
+            continue
+
+        snippet = yt_detail.get("snippet", {})
+        current_desc = snippet.get("description", "")
+        category_id = snippet.get("categoryId", "22")
+        yt_title = snippet.get("title", update["title"])
+
+        # Build the lines to append (skip any already present)
+        new_lines = []
+        for link in update["links"]:
+            link_text = f"{link['title']}: {link['url']}"
+            if link["url"] not in current_desc and link["title"] not in current_desc:
+                new_lines.append(link_text)
+
+        if not new_lines:
+            continue
+
+        # Insert into Related Videos section
+        updated_desc, insert_pos = _find_or_create_related_section(current_desc)
+        insert_block = "\n".join(new_lines) + "\n"
+        updated_desc = updated_desc[:insert_pos] + insert_block + updated_desc[insert_pos:]
+
+        # Push to YouTube
+        try:
+            await _yt_api_put("videos", {"part": "snippet"}, {
+                "id": vid,
+                "snippet": {
+                    "title": yt_title,
+                    "description": updated_desc,
+                    "categoryId": category_id,
+                },
+            })
+        except httpx.HTTPStatusError as e:
+            errors.append(f"{update['title']}: {e.response.status_code}")
+            continue
+        except Exception as e:
+            errors.append(f"{update['title']}: {e}")
+            continue
+
+        # Update local records
+        local_video = id_to_video.get(vid)
+        if local_video:
+            local_video["description"] = updated_desc
+            local_video["yt_description"] = updated_desc
+            local_video["updated_at"] = _now_iso()
+            # Add to related_videos list
+            for link in update["links"]:
+                existing_ids = [r["video_id"] for r in local_video.get("related_videos", [])]
+                if link["video_id"] not in existing_ids:
+                    local_video.setdefault("related_videos", []).append({
+                        "video_id": link["video_id"],
+                        "status": "linked",
+                    })
+
+        # Auto-resolve queue entries
+        for q in queue:
+            if q["video_id"] == vid and not q.get("resolved"):
+                if "cross-link" in q.get("reason", "").lower() or "crosslink" in q.get("reason", "").lower():
+                    q["resolved"] = True
+                    q["resolved_at"] = _now_iso()
+
+        pushed.append({"title": update["title"], "count": len(new_lines)})
+
+    # Save all local changes
+    _write_json(VIDEOS_FILE, videos)
+    _write_json(UPDATE_QUEUE_FILE, queue)
+
+    # Summary
+    total_links = sum(p["count"] for p in pushed)
+    lines = [f"## ✅ Pushed {total_links} cross-links across {len(pushed)} videos\n"]
+    for p in pushed:
+        lines.append(f"  - **{p['title']}**: +{p['count']} link(s)")
+    if errors:
+        lines.append(f"\n### ⚠️ Errors ({len(errors)})")
+        for e in errors:
+            lines.append(f"  - {e}")
 
     return "\n".join(lines)
 
