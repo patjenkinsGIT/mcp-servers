@@ -1812,6 +1812,8 @@ class BulkUpdateDescriptionsInput(BaseModel):
     filter_tag: Optional[str] = Field(default=None, description="Only process videos with this tag")
     filter_category: Optional[str] = Field(default=None, description="Only process videos in this category")
     operation: str = Field(..., description="'sync', 'inject_affiliate', or 'fix_formatting'")
+    affiliate_url: Optional[str] = Field(default=None, description="Custom affiliate URL to inject (default: ZeroSSL)")
+    affiliate_label: Optional[str] = Field(default=None, description="Display label for the affiliate link")
     dry_run: bool = Field(default=False, description="Preview without pushing")
 
     @field_validator("operation")
@@ -3412,6 +3414,7 @@ async def yt_bulk_update_descriptions(params: BulkUpdateDescriptionsInput) -> st
 
     results = []
     errors = []
+    skipped = []
 
     for v in filtered:
         vid = v["id"]
@@ -3433,12 +3436,27 @@ async def yt_bulk_update_descriptions(params: BulkUpdateDescriptionsInput) -> st
             updated_desc = _normalize_description(tracker_desc)
 
         elif params.operation == "inject_affiliate":
-            if "zerossl.com" in current_yt_desc.lower():
-                continue  # Already has affiliate
+            # Determine affiliate block to use
+            if params.affiliate_url:
+                aff_url = params.affiliate_url.strip()
+                aff_label = (params.affiliate_label or aff_url).strip()
+                aff_block = f"📚 {aff_label}:\n{aff_url}"
+                # Extract domain for duplicate check
+                try:
+                    aff_domain = aff_url.split("//")[-1].split("/")[0].split("?")[0].lower()
+                except Exception:
+                    aff_domain = aff_url.lower()
+            else:
+                aff_block = AFFILIATE_BLOCK
+                aff_domain = "zerossl.com"
+
+            if aff_domain in current_yt_desc.lower():
+                skipped.append(f"{v['title']}: {aff_domain} already present")
+                continue
             # Insert affiliate block after guide URL, before Related Videos
             sections = _parse_description_sections(current_yt_desc)
             if "affiliate" not in sections or not sections.get("affiliate", "").strip():
-                sections["affiliate"] = AFFILIATE_BLOCK
+                sections["affiliate"] = aff_block
             updated_desc = _rebuild_description_from_sections(sections)
             updated_desc = _normalize_description(updated_desc)
 
@@ -3504,6 +3522,11 @@ async def yt_bulk_update_descriptions(params: BulkUpdateDescriptionsInput) -> st
     for r in results:
         status = "📝" if r.get("changed") else "⏭️"
         lines.append(f"  {status} **{r['title']}**: {r['chars']} chars")
+
+    if skipped:
+        lines.append(f"\n### ⏭️ Skipped ({len(skipped)})")
+        for s in skipped:
+            lines.append(f"  - {s}")
 
     if errors:
         lines.append(f"\n### ⚠️ Errors ({len(errors)})")
