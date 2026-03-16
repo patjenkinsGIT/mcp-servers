@@ -11,14 +11,19 @@ cd fixmycert_yt_mcp
 pip install -r requirements.txt
 ```
 
-### 2. Set your YouTube API key
+### 2. Set environment variables
 
 ```bash
 # Add to your shell profile (~/.zshrc or ~/.bashrc)
 export YOUTUBE_API_KEY="your-api-key-here"
+
+# Required for write operations (description updates, comments):
+export YOUTUBE_OAUTH_TOKEN="your-refresh-token"
+export YOUTUBE_CLIENT_ID="your-client-id"
+export YOUTUBE_CLIENT_SECRET="your-client-secret"
 ```
 
-The API key enables live sync with YouTube (view counts, description verification, auto-discovery of new videos). The server works without it — API features will just return an error message.
+The API key enables live sync with YouTube (view counts, description verification, auto-discovery of new videos). The OAuth credentials enable write operations (pushing descriptions, posting comments). The server works without them — those features will just return an error message.
 
 ### 3. Add to Claude Desktop config
 
@@ -92,6 +97,14 @@ This loads all 17 known videos with metadata.
 | `yt_sync_from_youtube` | Pull all video data from YouTube — discovers new videos, updates stats |
 | `yt_refresh_video` | Refresh a single video's data (views, likes, description) |
 | `yt_check_descriptions` | Compare local descriptions vs. what's live on YouTube |
+
+### YouTube Description Updates (requires OAuth)
+| Tool | Description |
+|------|-------------|
+| `yt_update_description` | Push full or section-level description updates to YouTube (modes: `full`, `section`) |
+| `yt_push_all_crosslinks` | Batch-push all pending cross-links to YouTube descriptions |
+| `yt_push_pinned_comment` | Push pinned comment from tracker to YouTube (with Studio deep-link for pinning) |
+| `yt_bulk_update_descriptions` | Bulk push descriptions by filter — operations: `sync`, `inject_affiliate`, `fix_formatting` |
 
 ### Dashboard
 | Tool | Description |

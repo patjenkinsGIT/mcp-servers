@@ -14,8 +14,8 @@ Dockerized MCP servers running on DigitalOcean, accessible from any machine via 
 ### fixmycert-content-mcp (27 tools)
 Content registry, backlog, keywords, SEO logging, index submissions, and partnerships for FixMyCert. Replaces the fixmycerttracker spreadsheet as the single source of truth.
 
-### fixmycert-yt-mcp (29 tools)
-YouTube channel manager for FixMyCert — video registry, cross-link tracking, placeholder debt, update queue, A/B testing, content coverage gaps, and YouTube API sync. Includes `yt_update_description` and `yt_push_all_crosslinks` for pushing description updates directly to YouTube.
+### fixmycert-yt-mcp (32 tools)
+YouTube channel manager for FixMyCert — video registry, cross-link tracking, placeholder debt, update queue, A/B testing, content coverage gaps, and YouTube API sync. Includes `yt_update_description` (full/section mode), `yt_push_all_crosslinks`, `yt_push_pinned_comment`, and `yt_bulk_update_descriptions` for pushing updates directly to YouTube.
 
 ### myrobotictrader-mcp (17 tools)
 Content generation powered by crypto news feeds, Discord monitoring, CoinMarketCap market data, and live trading performance from Google Sheets.
@@ -61,7 +61,7 @@ See each service's own README for full tool listings.
 
 2. SSH into the DigitalOcean droplet, pull, and rebuild:
    ```bash
-   cd ~/mcp-servers
+   cd /opt/mcp-servers
    git pull origin main
    docker compose up -d --build
    ```
