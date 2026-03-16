@@ -3441,17 +3441,14 @@ async def yt_bulk_update_descriptions(params: BulkUpdateDescriptionsInput) -> st
                 aff_url = params.affiliate_url.strip()
                 aff_label = (params.affiliate_label or aff_url).strip()
                 aff_block = f"📚 {aff_label}:\n{aff_url}"
-                # Extract domain for duplicate check
-                try:
-                    aff_domain = aff_url.split("//")[-1].split("/")[0].split("?")[0].lower()
-                except Exception:
-                    aff_domain = aff_url.lower()
+                # Strip protocol for duplicate check — match full URL path
+                aff_check = aff_url.split("//")[-1].lower()
             else:
                 aff_block = AFFILIATE_BLOCK
-                aff_domain = "zerossl.com"
+                aff_check = "zerossl.com?fpr=fixmycert"
 
-            if aff_domain in current_yt_desc.lower():
-                skipped.append(f"{v['title']}: {aff_domain} already present")
+            if aff_check in current_yt_desc.lower():
+                skipped.append(f"{v['title']}: {aff_check} already present")
                 continue
             # Insert affiliate block after guide URL, before Related Videos
             sections = _parse_description_sections(current_yt_desc)
