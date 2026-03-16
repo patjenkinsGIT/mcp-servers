@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Optional
 
 import httpx
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -1610,23 +1612,37 @@ async def _yt_api_get(endpoint: str, params: dict) -> dict:
         return resp.json()
 
 
-def _check_oauth_token() -> str | None:
-    """Return OAuth token or None if not set."""
-    token = os.environ.get("YOUTUBE_OAUTH_TOKEN", "")
-    return token if token else None
+def _get_oauth_access_token() -> str:
+    """Exchange the refresh token for a short-lived access token."""
+    refresh_token = os.environ.get("YOUTUBE_OAUTH_TOKEN", "")
+    client_id = os.environ.get("YOUTUBE_CLIENT_ID", "")
+    client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET", "")
+    if not refresh_token:
+        raise ValueError(
+            "YOUTUBE_OAUTH_TOKEN environment variable not set. "
+            "Write operations require an OAuth2 refresh token."
+        )
+    if not client_id or not client_secret:
+        raise ValueError(
+            "YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET environment variables "
+            "must be set for OAuth2 token refresh."
+        )
+    creds = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=client_id,
+        client_secret=client_secret,
+    )
+    creds.refresh(Request())
+    return creds.token
 
 
 async def _yt_api_put(endpoint: str, params: dict, body: dict) -> dict:
     """Make a YouTube Data API PUT request (requires OAuth2 token)."""
-    token = _check_oauth_token()
-    if not token:
-        raise ValueError(
-            "YOUTUBE_OAUTH_TOKEN environment variable not set. "
-            "Write operations require an OAuth2 bearer token. "
-            "Set it and restart the server."
-        )
+    access_token = _get_oauth_access_token()
     headers = {
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
     }
     async with httpx.AsyncClient(timeout=30) as client:
@@ -2655,7 +2671,7 @@ async def yt_update_description(params: UpdateDescriptionInput) -> str:
     """
     if not _check_api_key():
         return "❌ YOUTUBE_API_KEY environment variable not set."
-    if not _check_oauth_token():
+    if not os.environ.get("YOUTUBE_OAUTH_TOKEN"):
         return "❌ YOUTUBE_OAUTH_TOKEN environment variable not set. Write operations require OAuth2."
 
     video_id = _extract_video_id(params.video_id)
@@ -2751,7 +2767,7 @@ async def yt_push_all_crosslinks(params: PushAllCrosslinksInput) -> str:
     """
     if not _check_api_key():
         return "❌ YOUTUBE_API_KEY environment variable not set."
-    if not params.dry_run and not _check_oauth_token():
+    if not params.dry_run and not os.environ.get("YOUTUBE_OAUTH_TOKEN"):
         return "❌ YOUTUBE_OAUTH_TOKEN environment variable not set. Write operations require OAuth2."
 
     videos = _read_json(VIDEOS_FILE)
