@@ -2914,7 +2914,7 @@ async def yt_update_description(params: UpdateDescriptionInput) -> str:
         return f"❌ Video not found: {params.identifier}"
 
     video_id = video["id"]
-    tracker_desc = video.get("yt_description") or video.get("description") or ""
+    tracker_desc = video.get("description") or ""
 
     if not tracker_desc.strip():
         return f"❌ No description in tracker for **{video['title']}**. Sync from YouTube first."
@@ -3426,7 +3426,7 @@ async def yt_bulk_update_descriptions(params: BulkUpdateDescriptionsInput) -> st
         category_id = snippet.get("categoryId", "22")
 
         if params.operation == "sync":
-            tracker_desc = v.get("yt_description") or v.get("description") or ""
+            tracker_desc = v.get("description") or ""
             if not tracker_desc.strip():
                 errors.append(f"{v['title']}: no description in tracker")
                 continue
