@@ -1130,7 +1130,24 @@ async def yt_get_coverage_gaps(params: DashboardInput) -> str:
         str: Content pieces without videos, sorted by priority
     """
     content_map = _read_json(CONTENT_MAP_FILE)
-    gaps = [c for c in content_map if not c.get("has_video")]
+    videos = _read_json(VIDEOS_FILE)
+    # Build set of guide_url paths that already have videos
+    covered_paths = {v.get("guide_url", "").rstrip("/").lower() for v in videos if v.get("guide_url")}
+
+    def _is_covered(c):
+        if c.get("has_video"):
+            return True
+        # Cross-reference: a video exists with guide_url matching this content path
+        path = c.get("path", "").rstrip("/").lower()
+        if path and path in covered_paths:
+            return True
+        # Exclusion note (e.g. "no video needed")
+        notes = (c.get("notes") or "").lower()
+        if "no video needed" in notes:
+            return True
+        return False
+
+    gaps = [c for c in content_map if not _is_covered(c)]
 
     if not gaps:
         if not content_map:
@@ -1301,8 +1318,14 @@ async def yt_dashboard(params: DashboardInput) -> str:
     pending_updates = [q for q in queue if not q.get("resolved")]
     high_priority = [q for q in pending_updates if q.get("priority") == "high"]
 
-    # Coverage
-    content_without_video = [c for c in content_map if not c.get("has_video")]
+    # Coverage — cross-reference videos table by guide_url and respect exclusion notes
+    covered_paths = {v.get("guide_url", "").rstrip("/").lower() for v in videos if v.get("guide_url")}
+    content_without_video = [
+        c for c in content_map
+        if not c.get("has_video")
+        and c.get("path", "").rstrip("/").lower() not in covered_paths
+        and "no video needed" not in (c.get("notes") or "").lower()
+    ]
 
     # A/B tests
     active_tests = [v for v in videos if v.get("ab_test", {}).get("status") == "active"]
