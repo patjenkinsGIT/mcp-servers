@@ -34,7 +34,7 @@ COMPLIANCE_API_URL = os.environ.get("COMPLIANCE_API_URL", "http://localhost:5000
 DATA_DIR = Path.home() / ".pki-compliance-mcp"
 LOG_FILE = DATA_DIR / "auto_refresh.log"
 MODEL = "claude-sonnet-4-20250514"
-INTER_QUERY_DELAY = 5  # seconds between API calls
+INTER_QUERY_DELAY = 15  # seconds between API calls
 
 # ---------------------------------------------------------------------------
 # Research queries
@@ -97,31 +97,38 @@ RESEARCH_QUERIES = [
 # ---------------------------------------------------------------------------
 
 
-def research(prompt: str) -> str:
+def research(prompt: str, max_retries: int = 3) -> str:
     """Call Claude API with web_search tool to research PKI updates."""
     if not ANTHROPIC_API_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY environment variable is not set")
 
-    with httpx.Client(timeout=120) as client:
-        response = client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "content-type": "application/json",
-                "anthropic-version": "2023-06-01",
-            },
-            json={
-                "model": MODEL,
-                "max_tokens": 4096,
-                "tools": [{"type": "web_search_20250305", "name": "web_search"}],
-                "messages": [{"role": "user", "content": prompt}],
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-        return "\n".join(
-            block["text"] for block in data["content"] if block["type"] == "text"
-        )
+    for attempt in range(max_retries):
+        with httpx.Client(timeout=180) as client:
+            response = client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": ANTHROPIC_API_KEY,
+                    "content-type": "application/json",
+                    "anthropic-version": "2023-06-01",
+                },
+                json={
+                    "model": MODEL,
+                    "max_tokens": 4096,
+                    "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+            )
+            if response.status_code == 429:
+                wait = 30 * (attempt + 1)
+                log(f"  Rate limited, waiting {wait}s (attempt {attempt+1}/{max_retries})")
+                time.sleep(wait)
+                continue
+            response.raise_for_status()
+            data = response.json()
+            return "\n".join(
+                block["text"] for block in data["content"] if block["type"] == "text"
+            )
+    raise RuntimeError(f"Rate limited after {max_retries} retries")
 
 
 # ---------------------------------------------------------------------------
