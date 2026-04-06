@@ -80,6 +80,7 @@ services:
       - MCP_HOST=0.0.0.0
       - DATA_DIR=/data
     restart: unless-stopped
+    command: ["python", "pki_compliance_mcp.py"]
 volumes:
   fixmycert-content-data:
     name: fixmycert-content-data
