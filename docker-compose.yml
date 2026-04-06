@@ -65,6 +65,21 @@ services:
       - DATA_DIR=/data
     restart: unless-stopped
     command: ["python", "myrobotictrader_content_mcp.py"]
+  pki-compliance:
+    build:
+      context: ./pki-compliance-mcp
+      dockerfile: ../Dockerfile.mcp
+    container_name: pki-compliance-mcp
+    ports:
+      - "8085:8085"
+    volumes:
+      - pki-compliance-data:/data
+    environment:
+      - MCP_TRANSPORT=sse
+      - MCP_PORT=8085
+      - MCP_HOST=0.0.0.0
+      - DATA_DIR=/data
+    restart: unless-stopped
 volumes:
   fixmycert-content-data:
     name: fixmycert-content-data
@@ -72,3 +87,5 @@ volumes:
     name: fixmycert-yt-data
   myrobotictrader-content-data:
     name: myrobotictrader-content-data
+  pki-compliance-data:
+    name: pki-compliance-data

@@ -4125,19 +4125,32 @@ if __name__ == "__main__":
     use_http = "--http" in sys.argv
     use_simple_http = "--simple-http" in sys.argv or os.environ.get("REPLIT_DEPLOYMENT")
 
+    # MCP_TRANSPORT env var (used by Docker Compose, consistent with other MCP servers)
+    mcp_transport = os.environ.get("MCP_TRANSPORT", "")
+
     # Replit provides PORT env var
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", os.environ.get("MCP_PORT", 5000)))
 
     for i, arg in enumerate(sys.argv):
         if arg == "--port" and i + 1 < len(sys.argv):
             port = int(sys.argv[i + 1])
 
-    if use_simple_http or os.environ.get("REPLIT_DEPLOYMENT"):
-        # Simple HTTP server for Replit compatibility
+    if mcp_transport == "sse":
+        # Docker Compose MCP mode (consistent with other servers)
+        if not MCP_AVAILABLE:
+            print("Error: MCP SDK not installed. Install with: pip install 'mcp[cli]'")
+            sys.exit(1)
+        mcp.settings.host = os.environ.get("MCP_HOST", "0.0.0.0")
+        mcp.settings.port = port
+        mcp.settings.transport_security.enable_dns_rebinding_protection = False
+        print(f"PKI Compliance MCP server (SSE) on http://0.0.0.0:{port}")
+        mcp.run(transport="sse")
+    elif use_simple_http or os.environ.get("REPLIT_DEPLOYMENT"):
+        # Simple HTTP server for Replit / systemd API mode
         from http.server import HTTPServer
         handler = create_http_app()
         server = HTTPServer(("0.0.0.0", port), handler)
-        print(f"🔐 PKI Compliance Monitor running on http://0.0.0.0:{port}")
+        print(f"PKI Compliance Monitor running on http://0.0.0.0:{port}")
         print(f"   Endpoints: /health, /status, /feeds, /documents, /deadlines, /frameworks, /sources")
         server.serve_forever()
     elif use_http:
