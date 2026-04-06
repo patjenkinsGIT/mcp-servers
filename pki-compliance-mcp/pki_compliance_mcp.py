@@ -3755,6 +3755,10 @@ def create_http_app():
     from http.server import HTTPServer, BaseHTTPRequestHandler
     import urllib.parse
 
+    import html as _html_mod
+    def _esc(s: str) -> str:
+        return _html_mod.escape(str(s))
+
     class PKIComplianceHandler(BaseHTTPRequestHandler):
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
@@ -3779,6 +3783,158 @@ def create_http_app():
                 }).encode())
                 return
             
+            # Dashboard — read-only HTML view, token-protected
+            if path == "/dashboard":
+                token = params.get("token", [None])[0]
+                expected = _os.environ.get("DASHBOARD_TOKEN", "")
+                if not expected or token != expected:
+                    self.send_response(401)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"Unauthorized. Append ?token=YOUR_TOKEN to the URL.")
+                    return
+
+                now = datetime.now(timezone.utc)
+                unified = get_all_deadlines_unified()
+                upcoming = sorted(
+                    [d for d in unified if days_until(d["date"]) >= 0],
+                    key=lambda d: d["date"],
+                )[:20]
+                news_data = get_news(limit=15)
+                news_items = news_data.get("items", [])
+
+                # Check for pending auto-refresh updates
+                pending_files = sorted(DATA_DIR.glob("pending_updates_*.json"), reverse=True)
+                pending_html = ""
+                if pending_files:
+                    latest = pending_files[0]
+                    try:
+                        pending = json.loads(latest.read_text())
+                        pdate = latest.stem.replace("pending_updates_", "")
+                        items = []
+                        for d in pending.get("new_deadlines", []):
+                            items.append(f'<li class="new">NEW: {_esc(d.get("title",""))} ({d.get("date","")})</li>')
+                        for d in pending.get("document_version_updates", []):
+                            items.append(f'<li class="update">DOC: {_esc(d.get("id",""))} &rarr; {_esc(d.get("new_version",""))}</li>')
+                        for d in pending.get("updated_deadlines", []):
+                            items.append(f'<li class="update">UPDATED: {_esc(d.get("id",""))}</li>')
+                        for d in pending.get("needs_human_review", []):
+                            reason = d.get("reason", d) if isinstance(d, dict) else str(d)
+                            items.append(f'<li class="review">REVIEW: {_esc(str(reason))}</li>')
+                        summary = _esc(pending.get("summary", ""))
+                        if items:
+                            pending_html = f'''
+                            <section>
+                                <h2>Pending Updates ({pdate})</h2>
+                                <p class="summary">{summary}</p>
+                                <ul>{"".join(items)}</ul>
+                            </section>'''
+                        else:
+                            pending_html = f'<section><h2>Pending Updates ({pdate})</h2><p>No changes found.</p></section>'
+                    except Exception:
+                        pending_html = ""
+
+                # Build deadline rows
+                deadline_rows = []
+                for d in upcoming:
+                    days_left = days_until(d["date"])
+                    urgency = "urgent" if days_left < 90 else ("soon" if days_left < 365 else "")
+                    source = d.get("source", d.get("framework_id", ""))
+                    deadline_rows.append(
+                        f'<tr class="{urgency}">'
+                        f'<td>{d["date"]}</td>'
+                        f'<td>{days_left}d</td>'
+                        f'<td>{_esc(d.get("title",""))}</td>'
+                        f'<td>{_esc(source)}</td>'
+                        f'<td>{"Yes" if d.get("isMajor") else ""}</td>'
+                        f'</tr>'
+                    )
+
+                # Build news rows
+                news_rows = []
+                for item in news_items:
+                    pub = item.get("publishedAt", "")[:10]
+                    prio = ' class="priority"' if item.get("isPriority") else ""
+                    news_rows.append(
+                        f'<tr{prio}>'
+                        f'<td>{pub}</td>'
+                        f'<td><a href="{_esc(item.get("url",""))}" target="_blank" rel="noopener">{_esc(item.get("title",""))}</a></td>'
+                        f'<td>{_esc(item.get("source",""))}</td>'
+                        f'</tr>'
+                    )
+
+                stale = is_data_stale()
+                stale_banner = '<div class="stale-banner">Data is stale — last review was over 45 days ago</div>' if stale else ""
+
+                html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>PKI Compliance Dashboard</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;padding:1.5rem;max-width:1100px;margin:0 auto}}
+h1{{color:#38bdf8;margin-bottom:.5rem;font-size:1.5rem}}
+h2{{color:#94a3b8;margin:1.5rem 0 .75rem;font-size:1.1rem;text-transform:uppercase;letter-spacing:.05em}}
+.meta{{color:#64748b;font-size:.85rem;margin-bottom:1rem}}
+.stale-banner{{background:#7c2d12;color:#fed7aa;padding:.5rem 1rem;border-radius:6px;margin-bottom:1rem;font-weight:600}}
+section{{background:#1e293b;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1rem}}
+table{{width:100%;border-collapse:collapse;font-size:.875rem}}
+th{{text-align:left;color:#94a3b8;padding:.5rem .4rem;border-bottom:1px solid #334155}}
+td{{padding:.45rem .4rem;border-bottom:1px solid #1e293b;vertical-align:top}}
+tr.urgent td{{color:#fbbf24;font-weight:600}}
+tr.soon td{{color:#a5b4fc}}
+tr.priority td{{background:#1e1b4b}}
+a{{color:#38bdf8;text-decoration:none}}
+a:hover{{text-decoration:underline}}
+ul{{list-style:none;padding:0}}
+li{{padding:.3rem 0;padding-left:1rem;position:relative}}
+li::before{{content:"";position:absolute;left:0;top:.65rem;width:6px;height:6px;border-radius:50%}}
+li.new::before{{background:#34d399}}
+li.update::before{{background:#60a5fa}}
+li.review::before{{background:#fbbf24}}
+.summary{{color:#94a3b8;font-size:.85rem;margin-bottom:.5rem}}
+</style>
+</head>
+<body>
+<h1>PKI Compliance Dashboard</h1>
+<p class="meta">Generated {now.strftime("%Y-%m-%d %H:%M UTC")} &middot; Data version {COMPLIANCE_METADATA.get("dataVersion","")} &middot; Last review {DATA_FRESHNESS.get("lastFullReview","")}</p>
+{stale_banner}
+{pending_html}
+<section>
+<h2>Upcoming Deadlines (next 20)</h2>
+<table>
+<tr><th>Date</th><th>In</th><th>Deadline</th><th>Source</th><th>Major</th></tr>
+{"".join(deadline_rows)}
+</table>
+</section>
+<section>
+<h2>PKI News Feed</h2>
+<table>
+<tr><th>Date</th><th>Article</th><th>Source</th></tr>
+{"".join(news_rows) if news_rows else "<tr><td colspan='3'>No news items yet. <a href='/api/news/refresh?token=" + (token or "") + "'>Refresh feeds</a></td></tr>"}
+</table>
+</section>
+<section>
+<h2>Document Versions</h2>
+<table>
+<tr><th>Document</th><th>Version</th><th>Date</th></tr>
+{"".join(f'<tr><td>{_esc(d["name"])}</td><td>{_esc(d["version"])}</td><td>{_esc(d["date"])}</td></tr>' for d in CABF_DOCUMENTS)}
+</table>
+</section>
+</body>
+</html>'''
+
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Robots-Tag", "noindex")
+                self.end_headers()
+                self.wfile.write(html.encode())
+                return
+
             # News API endpoints
             if path == "/api/news":
                 category = params.get("category", [None])[0]
