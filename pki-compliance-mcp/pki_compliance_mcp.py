@@ -315,15 +315,6 @@ DEADLINES = [
         "impact": "Affects CAs with dual-purpose roots in Mozilla's root store"
     },
     {
-        "id": "digicert-clientauth-removal",
-        "date": "2026-05-01",
-        "title": "DigiCert Complete ClientAuth Removal",
-        "description": "DigiCert will no longer issue public TLS certificates with Client Authentication EKU. No exceptions.",
-        "source": "chrome",
-        "category": "eku",
-        "isMajor": True,
-    },
-    {
         "id": "sectigo-clientauth-removal",
         "date": "2026-05-15",
         "title": "Sectigo Complete ClientAuth Removal",
@@ -331,6 +322,17 @@ DEADLINES = [
         "source": "chrome",
         "category": "eku",
         "isMajor": True,
+    },
+    {
+        "id": "digicert-clientauth-removal",
+        "date": "2027-03-01",
+        "title": "DigiCert Complete ClientAuth EKU Removal",
+        "description": "DigiCert permanently removes Client Authentication EKU option from CertCentral for all public TLS certificates (DV, OV, EV, QWAC). Manual opt-in was available since the Oct 2025 default removal. Customers needing clientAuth should migrate to DigiCert X9 PKI or private CA.",
+        "source": "chrome",
+        "category": "eku",
+        "isMajor": True,
+        "impact": "Organizations using DigiCert public TLS certs for mTLS must migrate before this date",
+        "note": "DigiCert's timeline is more gradual than Sectigo (May 2026). Default removed Oct 1, 2025; manual opt-in available until March 1, 2027. Source: https://knowledge.digicert.com/alerts/sunsetting-client-authentication-eku-from-digicert-public-tls-certificates",
     },
     {
         "id": "chrome-clientauth-leaf-sunset",
