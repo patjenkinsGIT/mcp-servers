@@ -375,6 +375,7 @@ DEADLINES = [
         "isMajor": True,
         "is_estimated": True,
         "impact": "Any Windows device that misses the 2023 cert rollout loses the ability to receive Secure Boot security updates. Air-gapped and Windows 10 fleets are highest risk.",
+        "framework_id": None,  # Secure Boot isn't a CA/B Forum thing; suppress the source=microsoft → cabforum default
         "framework_name": "Microsoft Root Program",
         "jurisdiction": "global",
         "status": "upcoming",
@@ -3089,44 +3090,50 @@ def get_all_deadlines_unified() -> List[Dict[str, Any]]:
     """
     all_deadlines = []
     
+    # Heuristic defaults applied only when the entry doesn't set the field
+    # explicitly. Putting defaults BEFORE `**d` means entry values win on the
+    # merge — the prior order (defaults after `**d`) silently clobbered
+    # entries that set jurisdiction/framework_id/status themselves.
+    framework_map = {
+        "cab-forum": "cabforum",
+        "chrome": "cabforum",
+        "mozilla": "cabforum",
+        "apple": "cabforum",
+        "microsoft": "cabforum",
+        "nist": "nist",
+        "nsa": "nsa",
+    }
+
     for d in DEADLINES:
         source = d.get("source", "unknown")
-        jurisdiction = "global"
-        if source in ["nist", "nsa"]:
-            jurisdiction = "us"
-        
-        framework_map = {
-            "cab-forum": "cabforum",
-            "chrome": "cabforum",
-            "mozilla": "cabforum",
-            "apple": "cabforum",
-            "microsoft": "cabforum",
-            "nist": "nist",
-            "nsa": "nsa",
-        }
-        framework_id = framework_map.get(source, None)
-        
-        status = d.get("ballotStatus", "upcoming")
-        if status in ["proposed", "voting"]:
-            status = "upcoming"
-        
+        default_jurisdiction = "us" if source in ("nist", "nsa") else "global"
+        default_framework_id = framework_map.get(source, None)
+
+        ballot_status = d.get("ballotStatus", "upcoming")
+        if ballot_status in ("proposed", "voting"):
+            ballot_status = "upcoming"
+        default_status = (
+            ballot_status if ballot_status in ("passed", "ongoing")
+            else calculate_status(d["date"], ballot_status)
+        )
+
         all_deadlines.append({
-            **d,
-            "framework_id": framework_id,
-            "jurisdiction": jurisdiction,
-            "status": calculate_status(d["date"], status) if status not in ["passed", "ongoing"] else status,
+            "framework_id": default_framework_id,
+            "jurisdiction": default_jurisdiction,
+            "status": default_status,
+            **d,  # entry-level fields override heuristic defaults
         })
-    
+
     for framework in REGULATORY_FRAMEWORKS:
         for deadline in framework.get("deadlines", []):
             all_deadlines.append({
-                **deadline,
                 "framework_id": framework["framework_id"],
                 "framework_name": framework["name"],
                 "jurisdiction": framework["jurisdiction"],
                 "source": framework["framework_id"],
                 "status": calculate_status(deadline["date"], deadline.get("status")),
                 "isMajor": deadline.get("impact") == "high",
+                **deadline,  # entry-level fields override framework-level defaults
             })
     
     return all_deadlines
