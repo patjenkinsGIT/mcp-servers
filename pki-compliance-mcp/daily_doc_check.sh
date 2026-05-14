@@ -25,8 +25,9 @@ ts() { date -u +%Y-%m-%dT%H:%M:%SZ; }
     exit 1
   fi
 
-  docker exec "$CONTAINER" python3 -c '
-import asyncio, json, sys
+  # Quoted heredoc preserves Python source verbatim — no bash quoting drama.
+  docker exec -i "$CONTAINER" python3 <<'PYEOF'
+import asyncio, json
 from pki_compliance_mcp import check_all_documents, CheckAllDocumentsInput, ResponseFormat
 
 async def main():
@@ -40,7 +41,7 @@ async def main():
         print(f"  {d['document_id']:28s} {d['status']:10s} hash={d.get('hash', '-')}")
 
 asyncio.run(main())
-'
+PYEOF
 
   echo "===== $(ts) daily_doc_check done ====="
 } >> "$LOG_FILE" 2>&1
