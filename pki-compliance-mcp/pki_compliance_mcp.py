@@ -4148,8 +4148,12 @@ if __name__ == "__main__":
         print(f"PKI Compliance MCP server (SSE) on http://0.0.0.0:{port}")
         mcp.run(transport="sse")
     elif use_simple_http or os.environ.get("REPLIT_DEPLOYMENT"):
-        # Simple HTTP server for Replit / systemd API mode
-        from http.server import HTTPServer
+        # Simple HTTP server for Replit / systemd API mode.
+        # ThreadingHTTPServer (not HTTPServer) — single-threaded server hangs on
+        # any slow/stuck handler, taking out the whole API. Public endpoint sees
+        # malicious probes (phpunit, PROPFIND) that can wedge a single-threaded
+        # listener.
+        from http.server import ThreadingHTTPServer as HTTPServer
         handler = create_http_app()
         server = HTTPServer(("0.0.0.0", port), handler)
         print(f"PKI Compliance Monitor running on http://0.0.0.0:{port}")
