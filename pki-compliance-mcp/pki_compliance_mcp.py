@@ -1811,9 +1811,9 @@ RELATED_RFCS = [
 
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
-    "lastUpdated": "2026-03-11",
-    "dataVersion": "2.3.0",
-    "basedOn": "CA/B Forum TLS BR 2.2.1, Code Signing BR 3.10, SC-080/081/085/090/091/092/097 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.0, Apple Root Store Policy, Microsoft Trusted Root Program, NIST SP 800-131A Rev 2, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
+    "lastUpdated": "2026-05-14",
+    "dataVersion": "2.3.1",
+    "basedOn": "CA/B Forum TLS BR 2.2.6, Code Signing BR 3.10, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.0, Apple Root Store Policy, Microsoft Trusted Root Program, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
         "https://cabforum.org",
@@ -1830,15 +1830,15 @@ COMPLIANCE_METADATA = {
 }
 
 DATA_FRESHNESS = {
-    "lastFullReview": "2026-03-11",
-    "nextReviewDue": "2026-04-11",
+    "lastFullReview": "2026-05-14",
+    "nextReviewDue": "2026-06-13",
     "reviewIntervalDays": 30,
     "fieldVerifications": {
-        "deadlines": {"verified": "2026-03-11", "source": "CA/B Forum TLS BR 2.2.1, NIST IR 8547, CNSA 2.0"},
-        "rootStores": {"verified": "2026-03-11", "source": "Individual root program policies"},
-        "algorithmRequirements": {"verified": "2026-03-11", "source": "CA/B Forum TLS BR 2.2.1, NIST FIPS 203/204/205"},
-        "caChains": {"verified": "2026-03-11", "source": "Official CA documentation"},
-        "pqcStandards": {"verified": "2026-03-11", "source": "NIST FIPS 203/204/205, NSA CNSA 2.0"}
+        "deadlines": {"verified": "2026-05-14", "source": "CA/B Forum TLS BR 2.2.6, NIST IR 8547, CNSA 2.0, NIS2 transposition tracking"},
+        "rootStores": {"verified": "2026-05-14", "source": "Individual root program policies"},
+        "algorithmRequirements": {"verified": "2026-05-14", "source": "CA/B Forum TLS BR 2.2.6, NIST FIPS 203/204/205, NIST SP 800-131A Rev 3"},
+        "caChains": {"verified": "2026-05-14", "source": "Official CA documentation"},
+        "pqcStandards": {"verified": "2026-05-14", "source": "NIST FIPS 203/204/205, NSA CNSA 2.0"}
     },
     "staleAfterDays": 45
 }
