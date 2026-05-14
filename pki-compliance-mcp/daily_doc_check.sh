@@ -34,10 +34,10 @@ async def main():
         CheckAllDocumentsInput(response_format=ResponseFormat.JSON)
     )
     data = json.loads(result)
-    print(f"checked_at: {data.get(\"checked_at\")}")
-    print(f"changes_detected: {data.get(\"changes_detected\")}")
-    for d in data.get("documents", []):
-        print(f"  {d[\"document_id\"]:28s} {d[\"status\"]:10s} hash={d.get(\"hash\", \"-\")}")
+    print(f"checked_at: {data.get('checked_at')}")
+    print(f"changes_detected: {data.get('changes_detected')}")
+    for d in data.get('documents', []):
+        print(f"  {d['document_id']:28s} {d['status']:10s} hash={d.get('hash', '-')}")
 
 asyncio.run(main())
 '
