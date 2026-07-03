@@ -164,6 +164,59 @@ MANUAL_CHECK_REQUIRED = [
 # "~ Est." badge), source_url (link to the authoritative source).
 DEADLINES = [
     {
+        "id": "chrome-cpcps-attestation-required",
+        "date": "2026-06-15",
+        "title": "Chrome CP/CPS Policy Adherence Attestation Required",
+        "description": "Chrome Root Program v1.8: a participant's CP or combined CP/CPS must explicitly state adherence to the latest published version of the Chrome Root Program Policy and the CCADB Policy.",
+        "source": "chrome",
+        "source_url": "https://www.chromium.org/Home/chromium-security/root-ca-policy/",
+        "category": "governance",
+        "isMajor": False,
+        "impact": "Chrome-trusted CAs must update CP/CPS statements to explicitly attest policy compliance.",
+    },
+    {
+        "id": "eo-14412-hva-pqc-key-establishment",
+        "date": "2030-12-31",
+        "title": "EO 14412: Federal HVAs must use PQC for key establishment",
+        "description": "Executive Order 14412 (June 22, 2026) requires federal agencies to transition all High Value Assets and high impact systems to NIST-approved PQC FIPS for key establishment (e.g., ML-KEM in TLS/IPsec) by December 31, 2030. OMB M-26-15 (June 24, 2026) operationalizes this for civilian agencies.",
+        "source": "nist",
+        "source_url": "https://www.whitehouse.gov/presidential-actions/2026/06/securing-the-nation-against-advanced-cryptographic-attacks/",
+        "category": "pqc",
+        "isMajor": True,
+        "impact": "Federal HVAs and high-impact systems must adopt ML-KEM key establishment by end of 2030; contractors must comply with PQC FIPS.",
+    },
+    {
+        "id": "eo-14412-hva-pqc-digital-signatures",
+        "date": "2031-12-31",
+        "title": "EO 14412: Federal HVAs must use PQC for digital signatures",
+        "description": "Executive Order 14412 (June 22, 2026) requires federal agencies to transition all High Value Assets and high impact systems to NIST-approved PQC digital signatures (e.g., ML-DSA/SLH-DSA in certificates and code signing) by December 31, 2031.",
+        "source": "nist",
+        "source_url": "https://www.whitehouse.gov/presidential-actions/2026/06/securing-the-nation-against-advanced-cryptographic-attacks/",
+        "category": "pqc",
+        "isMajor": True,
+        "impact": "Federal certificate and code-signing infrastructure must move to PQC signatures by end of 2031.",
+    },
+    {
+        "id": "dow-pqc-strategy-systems-support",
+        "date": "2030-12-31",
+        "title": "DoW PQC Strategy: all defense systems must support PQC",
+        "description": "The Department of War Post-Quantum Cryptography Strategy (June 23, 2026) requires all DoW systems to support PQC, or be phased out, by December 31, 2030, across NSA-certified High Assurance ECU and NIST-based Commercial Solutions tracks.",
+        "source": "nsa",
+        "source_url": "https://www.war.gov/News/Releases/Release/Article/4524599/securing-global-dominance-dow-unleashes-quantum-defense-strategy-to-harden-netw/",
+        "category": "pqc",
+        "isMajor": False,
+    },
+    {
+        "id": "dow-pqc-strategy-full-use",
+        "date": "2031-12-31",
+        "title": "DoW PQC Strategy: all defense systems must use PQC",
+        "description": "The Department of War Post-Quantum Cryptography Strategy (June 23, 2026) requires every DoW system to actively use PQC, unless otherwise specified, no later than December 31, 2031.",
+        "source": "nsa",
+        "source_url": "https://www.war.gov/News/Releases/Release/Article/4524599/securing-global-dominance-dow-unleashes-quantum-defense-strategy-to-harden-netw/",
+        "category": "pqc",
+        "isMajor": False,
+    },
+    {
         "id": "mozilla-mrsp-3-1-effective",
         "date": "2026-07-01",
         "title": "Mozilla Root Store Policy v3.1 Effective",
@@ -939,6 +992,16 @@ REGULATORY_FRAMEWORKS = [
                 "jurisdiction_detail": "Italy"
             },
             {
+                "id": "nis2-luxembourg-registration",
+                "title": "Luxembourg Self-Registration Deadline",
+                "date": "2026-07-10",
+                "source_url": "https://legilux.public.lu/eli/etat/leg/loi/2026/05/05/a225/jo",
+                "category": "registration",
+                "impact": "high",
+                "description": "Entities in scope of Luxembourg's NIS2 law (in force 10 May 2026) must self-register with the ILR by 10 July 2026 (Article 11). Non-registration is itself a sanctionable breach.",
+                "jurisdiction_detail": "Luxembourg"
+            },
+            {
                 "id": "nis2-austria-effective",
                 "title": "Austria Full Application",
                 "date": "2026-10-01",
@@ -1017,6 +1080,15 @@ REGULATORY_FRAMEWORKS = [
                 "category": "legislative",
                 "impact": "medium",
                 "description": "Public Bill Committee expected to report by 5:00pm."
+            },
+            {
+                "id": "uk-csr-lords-stage",
+                "title": "Bill Enters House of Lords",
+                "date": "2026-06-17",
+                "source_url": "https://bills.parliament.uk/bills/4035",
+                "category": "legislative",
+                "impact": "low",
+                "description": "Bill passed the House of Commons (third reading 16 Jun 2026) and had its first reading in the House of Lords on 17 June 2026. Lords second reading scheduled 14 July 2026."
             },
             {
                 "id": "uk-csr-royal-assent",
@@ -1106,8 +1178,8 @@ CABF_DOCUMENTS = [
     {
         "id": "code-signing-br",
         "name": "Code Signing BRs",
-        "version": "3.10",
-        "date": "Nov 2025",
+        "version": "3.11",
+        "date": "Jun 2026",
         "url": "https://cabforum.org/working-groups/code-signing/documents/",
     },
     {
