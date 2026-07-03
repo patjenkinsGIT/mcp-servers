@@ -73,6 +73,8 @@ python3 compliance_auto_refresh.py --reject <id> [<id> ...]
 python3 compliance_auto_refresh.py --list-rejected   # inspect the rejected list
 ```
 
+**After a substantive review, bump the freshness stamp** — `DATA_FRESHNESS["lastFullReview"]` (and the relevant `fieldVerifications` dates + `COMPLIANCE_METADATA["lastUpdated"]`) in `pki_compliance_mcp.py`. Nothing bumps these automatically; 45 days after `lastFullReview` the dashboard and the public site show a "data is stale" banner. The ops dashboard lives at `/dashboard?token=<DASHBOARD_TOKEN>` (token in the droplet's `.env`/crontab).
+
 **Manual research runs**
 ```bash
 python3 compliance_auto_refresh.py --force        # bypass the cost gate
