@@ -679,6 +679,7 @@ DEADLINES = [
         "title": "CA/B Forum SC099 — Validation logging requirements effective",
         "description": "CA validation logging requirements per SC099 become operationally effective. CAs must log validation evidence for audit purposes.",
         "source": "cab-forum",
+        "source_url": "https://cabforum.org/2026/04/18/ballot-sc099-improve-recording-of-validation-method/",
         "category": "validation",
         "isMajor": False,
         "framework_id": "cabforum",
