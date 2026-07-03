@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Offline tests for auto_approve.py tiered classification and source patching.
+
+No network, no git, no service restarts — pure classify/patch logic.
+"""
+import json
+import py_compile
+import tempfile
+from pathlib import Path
+
+import compliance_auto_refresh as car
+import auto_approve as aa
+
+PASS, FAIL = 0, 0
+
+
+def check(name, cond):
+    global PASS, FAIL
+    if cond:
+        PASS += 1
+        print(f"  ok   {name}")
+    else:
+        FAIL += 1
+        print(f"  FAIL {name}")
+
+
+d = Path(tempfile.mkdtemp())
+car.DATA_DIR = d
+car.REJECTED_FILE = d / "rejected.json"
+car.REJECTED_FILE.write_text(json.dumps({"ids": ["rejected-1"], "signatures": []}))
+
+CURRENT = {
+    "deadlines": [{"id": "existing-1", "title": "Existing", "date": "2027-01-01"}],
+    "cabfDocuments": [{"id": "tls-br", "version": "2.2.6"}],
+}
+
+
+def entry(**over):
+    base = {
+        "id": "new-ballot-deadline", "date": "2027-06-15",
+        "title": "New Ballot Deadline", "description": "Something new.",
+        "source": "cab-forum", "category": "certificates", "isMajor": False,
+        "source_url": "https://cabforum.org/2026/07/01/ballot-sc-100-something/",
+        "feed_confirmed": True,
+    }
+    base.update(over)
+    return base
+
+
+print("== source_url allowlist ==")
+check("cabforum allowed", aa.source_url_allowed("https://cabforum.org/x/"))
+check("subdomain allowed", aa.source_url_allowed("https://knowledge.digicert.com/alerts/x"))
+check("github only under /cabforum/", aa.source_url_allowed("https://github.com/cabforum/servercert/pull/1"))
+check("github elsewhere rejected", not aa.source_url_allowed("https://github.com/evil/repo"))
+check("random blog rejected", not aa.source_url_allowed("https://some-pki-blog.com/post"))
+check("http (not https) rejected", not aa.source_url_allowed("http://cabforum.org/x/"))
+
+print("== classify: happy path ==")
+changes = {"new_deadlines": [entry()], "document_version_updates": [{"id": "ev-guidelines", "new_version": "2.0.3"}],
+           "updated_deadlines": [], "regulatory_updates": [], "needs_human_review": []}
+auto_new, auto_docs, review, skipped = aa.classify(changes, CURRENT, 5)
+check("clean new deadline auto-approves", [x["id"] for x in auto_new] == ["new-ballot-deadline"])
+check("doc bump auto-approves", [x["id"] for x in auto_docs] == ["ev-guidelines"])
+check("nothing queued", not review and not skipped)
+
+print("== classify: gates ==")
+cases = [
+    ("missing feed_confirmed queues", entry(feed_confirmed=False)),
+    ("no source_url queues", entry(source_url=None)),
+    ("off-allowlist source queues", entry(source_url="https://pki-news.example.com/a")),
+    ("missing required field queues", entry(description=None)),
+    ("bad date format queues", entry(date="March 2027")),
+]
+for name, item in cases:
+    a, _, r, s = aa.classify({"new_deadlines": [item]}, CURRENT, 5)
+    check(name, not a and len(r) == 1 and not s)
+
+a, _, r, s = aa.classify({"new_deadlines": [entry(id="existing-1", title="Existing", date="2027-01-01")]}, CURRENT, 5)
+check("duplicate of live data skips (not queued)", not a and not r and len(s) == 1)
+a, _, r, s = aa.classify({"new_deadlines": [entry(id="rejected-1")]}, CURRENT, 5)
+check("previously rejected skips", not a and not r and len(s) == 1)
+
+print("== classify: guards ==")
+a, _, r, _ = aa.classify({"new_deadlines": [entry(), entry(title="Same id other content")]}, CURRENT, 5)
+check("conflict guard queues both", not a and len(r) == 2)
+many = [entry(id=f"new-{i}", title=f"New {i}") for i in range(6)]
+a, dv, r, _ = aa.classify({"new_deadlines": many}, CURRENT, 5)
+check("daily cap queues everything", not a and not dv and len(r) == 6)
+a, _, r, _ = aa.classify({"updated_deadlines": [{"id": "existing-1", "date": "2027-02-01"}]}, CURRENT, 5)
+check("updates always queue", not a and len(r) == 1)
+a, _, r, _ = aa.classify({"document_version_updates": [{"id": "tls-br", "new_version": "2.2.6"}]}, CURRENT, 5)
+check("already-current doc version skipped", not a and not r)
+
+print("== patch_source round-trip ==")
+mini = '''"""mini"""
+DEADLINES = [
+    {
+        "id": "old-entry",
+        "date": "2026-01-01",
+        "title": "Old",
+        "description": "Old entry.",
+        "source": "cab-forum",
+        "category": "certificates",
+        "isMajor": False,
+    },
+]
+CABF_DOCUMENTS = [
+    {"id": "tls-br", "name": "TLS BR", "version": "2.2.6", "date": "Mar 2026"},
+]
+DATA_FRESHNESS = {
+    "fieldVerifications": {
+        "deadlines": {"verified": "2026-05-14", "source": "x"},
+    },
+}
+COMPLIANCE_METADATA = {"lastUpdated": "2026-05-14"}
+'''
+p = d / "mini_module.py"
+p.write_text(mini)
+applied = aa.patch_source(p, [entry()], [{"id": "tls-br", "new_version": "2.2.7", "new_date": "Jul 2026"}])
+py_compile.compile(str(p), doraise=True)
+ns = {}
+exec(p.read_text(), ns)
+ids = [x["id"] for x in ns["DEADLINES"]]
+check("new entry inserted", "new-ballot-deadline" in ids and "old-entry" in ids)
+new = [x for x in ns["DEADLINES"] if x["id"] == "new-ballot-deadline"][0]
+check("source_url carried into entry", new["source_url"].startswith("https://cabforum.org/"))
+check("feed_confirmed stripped from entry", "feed_confirmed" not in new)
+check("doc version bumped", ns["CABF_DOCUMENTS"][0]["version"] == "2.2.7")
+check("doc date bumped", ns["CABF_DOCUMENTS"][0]["date"] == "Jul 2026")
+check("lastUpdated bumped", ns["COMPLIANCE_METADATA"]["lastUpdated"] != "2026-05-14")
+check("deadlines verification bumped", ns["DATA_FRESHNESS"]["fieldVerifications"]["deadlines"]["verified"] != "2026-05-14")
+check("applied ops itemized", len(applied) == 2)
+
+print(f"\n{PASS} passed, {FAIL} failed")
+raise SystemExit(1 if FAIL else 0)

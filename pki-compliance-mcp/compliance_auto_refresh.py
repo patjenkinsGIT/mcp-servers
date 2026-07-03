@@ -204,7 +204,8 @@ Each new_deadline should match this format:
   "category": "certificates|validation|revocation|...",
   "isMajor": true/false,
   "impact": "Brief impact statement",
-  "is_estimated": true/false (true unless a primary source explicitly states the exact day)
+  "is_estimated": true/false (true unless a primary source explicitly states the exact day),
+  "feed_confirmed": true/false (true ONLY when the research findings for this item cite a tracked source document or feed that was flagged as changed; when in doubt, false)
 }
 
 Each document_version_update:

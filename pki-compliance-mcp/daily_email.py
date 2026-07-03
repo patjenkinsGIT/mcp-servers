@@ -117,7 +117,26 @@ def auto_refresh_summary(log_lines: list[str]) -> dict:
     }
 
 
-def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict) -> str:
+def read_approval(date_str: str) -> dict | None:
+    """Read auto_approve.py output (10:15 cron): approval log + review queue."""
+    log_p = DATA_DIR / f"approval_log_{date_str}.json"
+    queue_p = DATA_DIR / f"review_queue_{date_str}.json"
+    if not log_p.exists() and not queue_p.exists():
+        return None
+    out = {"applied": [], "blocked": None, "queue": []}
+    try:
+        if log_p.exists():
+            data = json.loads(log_p.read_text())
+            out["applied"] = data.get("applied", [])
+            out["blocked"] = data.get("blocked")
+        if queue_p.exists():
+            out["queue"] = json.loads(queue_p.read_text()).get("items", [])
+    except Exception as e:
+        out["_parse_error"] = str(e)
+    return out
+
+
+def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None) -> str:
     """Build the HTML email body. Plain-text fallback is built separately."""
     parts = []
     parts.append(f"<h2 style='margin:0 0 12px 0;font:600 18px/1.3 -apple-system,system-ui,sans-serif'>PKI Compliance daily report — {date_str}</h2>")
@@ -138,6 +157,9 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
 
     parts.append("<p style='font:14px/1.4 -apple-system,system-ui,sans-serif;color:#333'>")
     parts.append(f"<strong>{proposed_count}</strong> proposed change(s) from research cron, ")
+    if approval is not None:
+        parts.append(f"<strong>{len(approval.get('applied', []))}</strong> applied automatically, ")
+        parts.append(f"<strong>{len(approval.get('queue', []))}</strong> queued for your review, ")
     parts.append(f"<strong>{needs_review_count}</strong> flagged for review, ")
     if doc_changes is None:
         parts.append("<strong>doc-check did not run</strong>.")
@@ -184,6 +206,30 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
     elif pending is None and auto_refresh.get("ran"):
         parts.append(f"<p style='color:#b91c1c;font:13px/1.4 -apple-system,system-ui,sans-serif'>⚠ Research cron ran but pending_updates_{date_str}.json is missing.</p>")
 
+    # Auto-approve outcome (10:15 cron)
+    if approval is not None:
+        parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>Auto-approve (10:15 UTC)</h3>")
+        if approval.get("_parse_error"):
+            parts.append(f"<p style='color:#b91c1c;font:13px/1.4 -apple-system,system-ui,sans-serif'>⚠ Could not parse auto-approve output: {escape(approval['_parse_error'])}</p>")
+        else:
+            if approval.get("blocked"):
+                parts.append(f"<p style='color:#b45309;font:13px/1.4 -apple-system,system-ui,sans-serif'>⚠ Auto-apply blocked ({escape(str(approval['blocked']))}) — everything queued for review.</p>")
+            if approval.get("applied"):
+                parts.append("<ul style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding-left:20px'>")
+                for op in approval["applied"]:
+                    parts.append(f"<li>✓ Applied: {escape(op)}</li>")
+                parts.append("</ul>")
+            if approval.get("queue"):
+                parts.append("<p style='font:13px/1.4 -apple-system,system-ui,sans-serif;margin:8px 0 4px 0'><strong>Queued for your review:</strong></p>")
+                parts.append("<ul style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding-left:20px'>")
+                for q in approval["queue"]:
+                    item = q.get("item", {})
+                    label = item.get("title") or item.get("id") or str(item)[:80] if isinstance(item, dict) else str(item)[:80]
+                    parts.append(f"<li><strong>[{escape(q.get('kind',''))}]</strong> {escape(label)} — <em>{escape(q.get('reason',''))}</em></li>")
+                parts.append("</ul>")
+            if not approval.get("applied") and not approval.get("queue"):
+                parts.append("<p style='font:13px/1.4 -apple-system,system-ui,sans-serif;color:#666'>Nothing to apply or review.</p>")
+
     # Items flagged for review
     if pending and pending.get("needs_human_review"):
         parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>Flagged for human review</h3>")
@@ -217,7 +263,7 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
     return "<div style='max-width:640px'>" + "".join(parts) + "</div>"
 
 
-def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict) -> str:
+def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None) -> str:
     lines = [f"PKI Compliance daily report — {date_str}", "=" * 60, ""]
 
     proposed = 0
@@ -230,6 +276,11 @@ def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refre
         )
 
     lines.append(f"Proposed changes: {proposed}")
+    if approval is not None:
+        lines.append(f"Applied automatically: {len(approval.get('applied', []))}")
+        lines.append(f"Queued for review: {len(approval.get('queue', []))}")
+        if approval.get("blocked"):
+            lines.append(f"Auto-apply BLOCKED: {approval['blocked']}")
     lines.append(f"Flagged for review: {len(pending.get('needs_human_review', [])) if pending else 0}")
     lines.append(f"Doc URL hash changes: {doc_check.get('changes_detected', 'n/a')}")
     lines.append("")
@@ -257,6 +308,7 @@ def main() -> int:
 
     auto_refresh = auto_refresh_summary(cron_log)
     doc_check = doc_check_summary(doc_log)
+    approval = read_approval(date_str)
 
     proposed = 0
     if pending and "_parse_error" not in pending:
@@ -268,8 +320,8 @@ def main() -> int:
         )
     subject = f"[PKI Compliance] {date_str} — {proposed} proposed change(s)"
 
-    html = render_html(date_str, pending, doc_check, auto_refresh)
-    text = render_text(date_str, pending, doc_check, auto_refresh)
+    html = render_html(date_str, pending, doc_check, auto_refresh, approval)
+    text = render_text(date_str, pending, doc_check, auto_refresh, approval)
 
     try:
         r = httpx.post(

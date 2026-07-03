@@ -10,6 +10,7 @@ Runs on the DigitalOcean droplet at `/opt/mcp-servers/pki-compliance-mcp`, serve
 |------|---------|
 | `pki_compliance_mcp.py` | MCP server + HTTP API. All compliance data lives inline here (no database): `DEADLINES`, `REGULATORY_FRAMEWORKS`, `CABF_DOCUMENTS`, root stores, CA chains, etc. |
 | `compliance_auto_refresh.py` | Daily research cron: cost gate → Claude research with web search → diff analysis → dedup → pending-updates file for review. |
+| `auto_approve.py` | Tiered auto-approval (10:15 UTC): applies low-risk proposals automatically, queues the rest. Fail-safe: queues everything if the repo is dirty or git push is unavailable. |
 | `daily_doc_check.sh` | Daily document hash check (refreshes document version state in the MCP container). |
 | `daily_email.py` | Morning summary email via Resend. |
 | `deploy.sh` | Pull + pip install + restart the systemd service (run on the droplet). |
@@ -52,14 +53,22 @@ Each `DEADLINES` entry:
 2. **Research** — runs the `RESEARCH_QUERIES` via Claude with web search.
 3. **Diff analysis** — compares findings to live `/api/compliance-data` under `DIFF_SYSTEM_PROMPT` (date precision rules, mandatory `source_url`, unsure → `needs_human_review`).
 4. **Dedup** (`dedup_changes`) — drops proposals already in `DEADLINES` (by id or normalized title+date signature), already-current document versions, and previously rejected ids.
-5. **Output** — writes `~/.pki-compliance-mcp/pending_updates_<date>.json`. **Live data is never changed automatically.** (A Sunday `--auto-apply` cron line exists in the crontab but is commented out.)
+5. **Output** — writes `~/.pki-compliance-mcp/pending_updates_<date>.json`.
+
+**10:15 — `auto_approve.py`** — tiered auto-approval of the pending file:
+- **AUTO** (applied, committed, pushed, service restarted): new deadlines that pass ALL of — required fields present; `source_url` on the primary-source allowlist (CABF, browser vendors, NIST/NSA, EUR-Lex, UK Parliament, github.com only under `/cabforum/`); `feed_confirmed: true`; not a duplicate; not previously rejected. Document version bumps for known doc ids.
+- **REVIEW** (queued in `review_queue_<date>.json`): everything else — updates to existing entries (covers estimated-date discipline), regulatory updates, anything flagged, conflicting candidates (two touching the same id), and everything when the daily cap (`--max-auto`, default 5) is exceeded — a burst of "approvable" items usually means an upstream break.
+- **Fail-safe**: if the repo working tree is dirty or `git push` is unavailable, nothing is applied — everything queues. Before any write it backs up the source to `~/.pki-compliance-mcp/backups/`, and after patching it must pass `py_compile` + both test suites or it rolls back.
+- Auto-applies bump `lastUpdated` and the deadlines field verification, but **not** `lastFullReview` — the 45-day stale clock still requires a human review.
+- **Rollback**: `git revert` the auto-approve commit (ops itemized in `approval_log_<date>.json`), or restore the newest backup and restart the service.
+- Dry run against a real pending file: `python3 auto_approve.py --dry-run [--date YYYY-MM-DD]`.
 
 **10:30 — `daily_doc_check.sh`** refreshes document version state.
-**10:35 — `daily_email.py`** sends the morning summary (Resend).
+**10:35 — `daily_email.py`** sends the morning summary (Resend) — reports "N applied automatically, M queued for your review" with the itemized lists.
 
 ## Reviewing proposals (the only routine human task)
 
-When the morning email / pending-updates file proposes changes:
+Low-risk proposals are applied automatically at 10:15 (see above); the morning email tells you what was applied and what's queued. For queued items in `review_queue_<date>.json`:
 
 **Accept a proposed deadline**
 1. Verify the proposal's `source_url` actually supports the date (open the link).
