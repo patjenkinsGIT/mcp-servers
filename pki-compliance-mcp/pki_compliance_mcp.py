@@ -335,9 +335,9 @@ DEADLINES = [
     },
     {
         "id": "sectigo-clientauth-removal",
-        "date": "2026-05-15",
+        "date": "2027-02-10",
         "title": "Sectigo Complete ClientAuth Removal",
-        "description": "Sectigo permanently removes Client Authentication EKU from all newly issued SSL/TLS certificates.",
+        "description": "Sectigo no longer includes Client Authentication EKU in any SSL/TLS certificates. Hard deadline, no exceptions. Existing certificates remain valid until expiration or revocation.",
         "source": "chrome",
         "source_url": "https://www.sectigo.com/resource-library/deprecation-of-client-authentication-eku-from-sectigo-ssl-tls-certificates",
         "category": "eku",
