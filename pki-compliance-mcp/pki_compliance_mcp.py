@@ -159,6 +159,9 @@ MANUAL_CHECK_REQUIRED = [
 # - [ ] Update any "proposed" entries that have passed voting + IPR
 # =============================================================================
 
+# Each entry: id, date, title, description, source, category, isMajor.
+# Optional keys: impact, is_estimated (date is not day-precise, rendered as
+# "~ Est." badge), source_url (link to the authoritative source).
 DEADLINES = [
     {
         "id": "ocsp-15-min",
@@ -3121,6 +3124,7 @@ def get_all_deadlines_unified() -> List[Dict[str, Any]]:
             "framework_id": default_framework_id,
             "jurisdiction": default_jurisdiction,
             "status": default_status,
+            "source_url": None,
             **d,  # entry-level fields override heuristic defaults
         })
 
@@ -3133,6 +3137,7 @@ def get_all_deadlines_unified() -> List[Dict[str, Any]]:
                 "source": framework["framework_id"],
                 "status": calculate_status(deadline["date"], deadline.get("status")),
                 "isMajor": deadline.get("impact") == "high",
+                "source_url": None,
                 **deadline,  # entry-level fields override framework-level defaults
             })
     

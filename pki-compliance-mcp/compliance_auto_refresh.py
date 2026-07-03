@@ -173,6 +173,16 @@ Rules:
 - Generate unique id fields following kebab-case naming convention
 - If unsure, flag for human review instead of auto-adding
 
+Date precision rules:
+- Only emit a day-precise date when a primary source explicitly states that \
+exact day (e.g., "effective March 15, 2027"). NEVER guess or invent a specific day.
+- If the source only states a month, use the last day of that month and set \
+"is_estimated": true.
+- If the source only states a quarter or year, use the last day of that \
+quarter or year and set "is_estimated": true.
+- The "date" field must always be formatted YYYY-MM-DD; "is_estimated" is what \
+distinguishes confirmed exact dates from estimated ones.
+
 Return a JSON object with this structure:
 {
   "new_deadlines": [...],
@@ -190,9 +200,11 @@ Each new_deadline should match this format:
   "title": "Short Title",
   "description": "Full description",
   "source": "cab-forum|chrome|mozilla|apple|microsoft|nist|nsa",
+  "source_url": "https://... (URL of the primary/authoritative source for this deadline)",
   "category": "certificates|validation|revocation|...",
   "isMajor": true/false,
-  "impact": "Brief impact statement"
+  "impact": "Brief impact statement",
+  "is_estimated": true/false (true unless a primary source explicitly states the exact day)
 }
 
 Each document_version_update:
