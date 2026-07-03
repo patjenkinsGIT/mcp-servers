@@ -35,7 +35,17 @@ test_entry = {
     "source_url": "https://cabforum.org/example-ballot",
     "is_estimated": True,
 }
+no_url_entry = {
+    "id": "test-entry-without-source-url",
+    "date": "2027-04-01",
+    "title": "Test Entry Without Source URL",
+    "description": "Temporary test entry lacking source_url.",
+    "source": "cab-forum",
+    "category": "certificates",
+    "isMajor": False,
+}
 pki.DEADLINES.append(test_entry)
+pki.DEADLINES.append(no_url_entry)
 try:
     unified = pki.get_all_deadlines_unified()
     by_id = {d["id"]: d for d in unified}
@@ -45,7 +55,7 @@ try:
           added.get("source_url") == "https://cabforum.org/example-ballot")
     check("is_estimated passes through", added.get("is_estimated") is True)
 
-    without = by_id.get("ocsp-15-min", {})
+    without = by_id.get("test-entry-without-source-url", {})
     check("entry without source_url gets explicit null",
           "source_url" in without and without["source_url"] is None)
 
@@ -63,6 +73,7 @@ try:
           "https://cabforum.org/example-ballot" in payload)
 finally:
     pki.DEADLINES.remove(test_entry)
+    pki.DEADLINES.remove(no_url_entry)
 
 print("== DIFF_SYSTEM_PROMPT documents new fields ==")
 prompt = car.DIFF_SYSTEM_PROMPT
