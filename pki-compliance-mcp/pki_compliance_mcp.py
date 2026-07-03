@@ -403,7 +403,6 @@ DEADLINES = [
         "framework_id": None,  # Secure Boot isn't a CA/B Forum thing; suppress the source=microsoft → cabforum default
         "framework_name": "Microsoft Root Program",
         "jurisdiction": "global",
-        "status": "upcoming",
     },
     {
         "id": "sc097-sha1-ca-crl-sunset",
@@ -732,7 +731,6 @@ DEADLINES = [
         "framework_id": "cabforum",
         "framework_name": "CA/Browser Forum",
         "jurisdiction": "global",
-        "status": "upcoming",
     },
     {
         "id": "fips-140-2-historical",
@@ -747,7 +745,6 @@ DEADLINES = [
         "framework_id": "nist",
         "framework_name": "NIST",
         "jurisdiction": "us",
-        "status": "upcoming",
     },
     {
         "id": "cnsa-2-nss-acquisition-begins",
@@ -761,7 +758,6 @@ DEADLINES = [
         "framework_id": "nsa",
         "framework_name": "NSA CNSA 2.0",
         "jurisdiction": "us",
-        "status": "upcoming",
     },
     {
         "id": "nist-800-131a-112bit-disallowed",
@@ -776,7 +772,6 @@ DEADLINES = [
         "framework_id": "nist",
         "framework_name": "NIST SP 800-131A",
         "jurisdiction": "us",
-        "status": "upcoming",
     },
     {
         "id": "luxembourg-nis2-in-force",
@@ -816,7 +811,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "DORA Effective",
                 "date": "2025-01-17",
                 "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554",
-                "status": "passed",
                 "category": "effective",
                 "impact": "high",
                 "description": "Regulation now applies to all EU financial entities. No transitional period."
@@ -826,7 +820,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "ROI Submission to ESAs",
                 "date": "2025-04-30",
                 "source_url": "https://www.eba.europa.eu/publications-and-media/press-releases/esas-provide-roadmap-towards-designation-ctpps-under-dora",
-                "status": "passed",
                 "category": "reporting",
                 "impact": "high",
                 "description": "National competent authorities submit Registers of Information on ICT third-party arrangements to ESAs."
@@ -836,7 +829,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "CTPP Designation Notifications",
                 "date": "2025-07-31",
                 "source_url": "https://www.eba.europa.eu/publications-and-media/press-releases/esas-provide-roadmap-towards-designation-ctpps-under-dora",
-                "status": "passed",
                 "category": "oversight",
                 "impact": "high",
                 "description": "ESAs notify ICT third-party service providers of their classification as Critical Third-Party Providers."
@@ -846,7 +838,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "EC Review Report Due",
                 "date": "2026-01-17",
                 "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554",
-                "status": "upcoming",
                 "category": "review",
                 "impact": "medium",
                 "description": "European Commission reviews DORA implementation and submits report to Parliament on potential scope expansion (Article 58)."
@@ -856,7 +847,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Annual ROI Submission (2026)",
                 "date": "2026-03-31",
                 "source_url": "https://eba.europa.eu/activities/direct-supervision-and-oversight/digital-operational-resilience-act/preparation-dora-application",
-                "status": "upcoming",
                 "category": "reporting",
                 "impact": "high",
                 "description": "Second annual Register of Information submission. From 2026 onwards, competent authorities submit RoIs to the ESAs by 31 March each year (per EBA DORA reporting FAQ). Regulators expect more mature submissions with detailed ICT third-party documentation."
@@ -879,7 +869,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Transposition Deadline",
                 "date": "2024-10-17",
                 "source_url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj/eng",
-                "status": "passed",
                 "category": "effective",
                 "impact": "high",
                 "description": "Member states required to transpose NIS2 into national law. 23 states missed deadline; EC opened infringement proceedings.",
@@ -890,7 +879,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Germany BSI Act Effective",
                 "date": "2025-12-06",
                 "source_url": "https://www.recht.bund.de/bgbl/1/2025/301/VO.html",
-                "status": "passed",
                 "category": "national",
                 "impact": "high",
                 "description": "German NIS2 implementation via amended BSI Act enters into force.",
@@ -901,7 +889,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "EU-CyCLONe Report",
                 "date": "2026-01-17",
                 "source_url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj/eng",
-                "status": "upcoming",
                 "category": "reporting",
                 "impact": "medium",
                 "description": "European cyber crisis liaison network submits report to Parliament and Council.",
@@ -912,7 +899,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Germany Registration Deadline",
                 "date": "2026-04-06",
                 "source_url": "https://www.bsi.bund.de/DE/Themen/Regulierte-Wirtschaft/NIS-2-regulierte-Unternehmen/NIS-2-Pflichten/nis-2-pflichten_node.html",
-                "status": "upcoming",
                 "category": "registration",
                 "impact": "high",
                 "description": "Entities must register with Federal Office for Information Security (BSI) within 3 months of BSI Act entering force.",
@@ -923,7 +909,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Italy First Compliance Audit",
                 "date": "2026-06-30",
                 "source_url": "https://www.acn.gov.it/portale/nis/categorizzazione",
-                "status": "upcoming",
                 "category": "audit",
                 "impact": "high",
                 "description": "Deadline for first audit verifying NIS2 compliance (moved from Dec 31, 2025).",
@@ -934,7 +919,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Austria Full Application",
                 "date": "2026-10-01",
                 "source_url": "https://www.ris.bka.gv.at/Dokumente/Bundesnormen/NOR40273912/NOR40273912.html",
-                "status": "upcoming",
                 "category": "effective",
                 "impact": "high",
                 "description": "Network and Information System Security Act 2026 fully applicable.",
@@ -945,7 +929,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Italy Security Requirements",
                 "date": "2026-10-31",
                 "source_url": "https://www.acn.gov.it/portale/en/nis/modalita-specifiche-base",
-                "status": "upcoming",
                 "category": "requirements",
                 "impact": "high",
                 "description": "ACN technical annexes establishing minimum security requirements become effective (ACN states October 2026; 18 months from April 2025 list consolidation).",
@@ -957,7 +940,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "EU-CyCLONe Report (2027)",
                 "date": "2027-07-17",
                 "source_url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj/eng",
-                "status": "upcoming",
                 "category": "reporting",
                 "impact": "medium",
                 "description": "Next 18-month cycle report from cyber crisis liaison network.",
@@ -981,7 +963,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Bill Introduced",
                 "date": "2025-11-12",
                 "source_url": "https://bills.parliament.uk/bills/4035",
-                "status": "passed",
                 "category": "legislative",
                 "impact": "low",
                 "description": "Cyber Security and Resilience (Network and Information Systems) Bill introduced to House of Commons."
@@ -991,7 +972,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Second Reading Passed",
                 "date": "2026-01-06",
                 "source_url": "https://bills.parliament.uk/bills/4035",
-                "status": "passed",
                 "category": "legislative",
                 "impact": "low",
                 "description": "Bill passed second reading in House of Commons."
@@ -1001,7 +981,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Committee Stage Begins",
                 "date": "2026-02-03",
                 "source_url": "https://bills.parliament.uk/bills/4035",
-                "status": "upcoming",
                 "category": "legislative",
                 "impact": "low",
                 "description": "Public Bill Committee begins line-by-line scrutiny. Oral evidence sessions."
@@ -1011,7 +990,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Committee Stage Reports",
                 "date": "2026-03-05",
                 "source_url": "https://bills.parliament.uk/bills/4035",
-                "status": "upcoming",
                 "category": "legislative",
                 "impact": "medium",
                 "description": "Public Bill Committee expected to report by 5:00pm."
@@ -1021,7 +999,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Royal Assent (Estimated)",
                 "date": "2026-12-31",
                 "source_url": "https://bills.parliament.uk/bills/4035",
-                "status": "upcoming",
                 "category": "legislative",
                 "impact": "high",
                 "description": "Bill was carried over and reintroduced May 2026; passed Commons third reading 16 Jun 2026; Lords second reading scheduled 14 Jul 2026. Royal Assent now expected late 2026.",
@@ -1032,7 +1009,6 @@ REGULATORY_FRAMEWORKS = [
                 "title": "Implementation Begins (Estimated)",
                 "date": "2027-12-31",
                 "source_url": "https://www.gov.uk/government/publications/cyber-security-and-resilience-network-and-information-systems-bill-factsheets",
-                "status": "upcoming",
                 "category": "implementation",
                 "impact": "high",
                 "description": "Phased implementation via secondary legislation expected during 2027, following Royal Assent. Detailed requirements to follow.",
@@ -3185,11 +3161,14 @@ def get_all_deadlines_unified() -> List[Dict[str, Any]]:
         default_jurisdiction = "us" if source in ("nist", "nsa") else "global"
         default_framework_id = framework_map.get(source, None)
 
+        # ballotStatus tracks the BALLOT (proposed/voting/passed), not the
+        # deadline: a passed ballot with a future effective date is still an
+        # upcoming deadline. Only "ongoing" bypasses date-based status.
         ballot_status = d.get("ballotStatus", "upcoming")
-        if ballot_status in ("proposed", "voting"):
+        if ballot_status in ("proposed", "voting", "passed"):
             ballot_status = "upcoming"
         default_status = (
-            ballot_status if ballot_status in ("passed", "ongoing")
+            ballot_status if ballot_status == "ongoing"
             else calculate_status(d["date"], ballot_status)
         )
 

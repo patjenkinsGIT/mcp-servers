@@ -75,6 +75,19 @@ finally:
     pki.DEADLINES.remove(test_entry)
     pki.DEADLINES.remove(no_url_entry)
 
+print("== status is date-consistent (no stale hardcoded values) ==")
+from datetime import datetime, timezone
+today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+unified = pki.get_all_deadlines_unified()
+stale_upcoming = [d["id"] for d in unified
+                  if d["status"] == "upcoming" and d["date"] < today]
+stale_passed = [d["id"] for d in unified
+                if d["status"] == "passed" and d["date"] > today]
+check(f"no past-dated deadline reports 'upcoming' {stale_upcoming or ''}",
+      not stale_upcoming)
+check(f"no future-dated deadline reports 'passed' {stale_passed or ''}",
+      not stale_passed)
+
 print("== DIFF_SYSTEM_PROMPT documents new fields ==")
 prompt = car.DIFF_SYSTEM_PROMPT
 check("documents is_estimated", '"is_estimated"' in prompt)
