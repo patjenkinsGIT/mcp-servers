@@ -188,6 +188,7 @@ DEADLINES = [
         "title": "Multi-Perspective Issuance Corroboration",
         "description": "CAs MUST corroborate domain validation from multiple network perspectives to mitigate BGP hijacking attacks.",
         "source": "cab-forum",
+        "source_url": "https://cabforum.org/2024/08/05/ballot-sc067v3-require-domain-validation-and-caa-checks-to-be-performed-from-multiple-network-perspectives-corroboration/",
         "category": "validation",
         "isMajor": True,
         "impact": "Prevents BGP hijacking attacks",
