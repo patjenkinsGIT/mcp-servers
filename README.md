@@ -10,6 +10,7 @@ Dockerized MCP servers running on DigitalOcean, accessible from any machine via 
 | fixmycert-yt-mcp | 8082 | FixMyCert YouTube channel manager |
 | myrobotictrader-mcp | 8083 | MyRoboticTrader tools |
 | myrobotictrader-content-mcp | 8084 | MyRoboticTrader content tracker |
+| pki-compliance-mcp | 5000 | PKI compliance deadlines API + MCP (backs the fixmycert.com Compliance Hub; systemd, not Docker) |
 
 ### fixmycert-content-mcp (27 tools)
 Content registry, backlog, keywords, SEO logging, index submissions, and partnerships for FixMyCert. Replaces the fixmycerttracker spreadsheet as the single source of truth.
@@ -22,6 +23,9 @@ Content generation powered by crypto news feeds, Discord monitoring, CoinMarketC
 
 ### myrobotictrader-content-mcp (25 tools)
 Content registry, backlog, keywords, SEO logging, index submissions, and partnerships for MyRoboticTrader.
+
+### pki-compliance-mcp
+PKI compliance deadline tracker backing the [FixMyCert Compliance Hub](https://fixmycert.com/compliance) — CA/Browser Forum ballots, browser root programs, NIST/NSA, DORA/NIS2/UK CSR. Includes a cost-gated daily AI research pipeline that proposes updates for human review. Runs as a systemd service (`pki-compliance-api`) behind nginx, not via docker-compose. See [pki-compliance-mcp/README.md](pki-compliance-mcp/README.md) for the full process flow and operations guide.
 
 See each service's own README for full tool listings.
 
