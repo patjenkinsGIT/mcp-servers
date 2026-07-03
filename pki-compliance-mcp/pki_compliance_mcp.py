@@ -164,6 +164,30 @@ MANUAL_CHECK_REQUIRED = [
 # "~ Est." badge), source_url (link to the authoritative source).
 DEADLINES = [
     {
+        "id": "mozilla-mrsp-3-1-effective",
+        "date": "2026-07-01",
+        "title": "Mozilla Root Store Policy v3.1 Effective",
+        "description": "MRSP v3.1 takes effect, shifting focus to CA documentation transparency and audit reporting, including stricter CP/CPS content expectations under Section 3.3.",
+        "source": "mozilla",
+        "source_url": "https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/policy/",
+        "category": "governance",
+        "isMajor": True,
+        "impact": "CAs in the Mozilla root program must begin aligning CP/CPS documentation and audit practices with new v3.1 requirements.",
+        "is_estimated": False,
+    },
+    {
+        "id": "mozilla-cpcps-content-compliance-deadline",
+        "date": "2027-07-01",
+        "title": "Mozilla CP/CPS Content Requirements Full Compliance Deadline",
+        "description": "CAs SHALL comply with MRSP item 2 and Sections 3.3.1 through 3.3.6 (CP/CPS content and quality requirements) no later than July 1, 2027.",
+        "source": "mozilla",
+        "source_url": "https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/policy/",
+        "category": "governance",
+        "isMajor": True,
+        "impact": "CAs must finalize updated CP/CPS documentation meeting enhanced content and audit transparency standards.",
+        "is_estimated": False,
+    },
+    {
         "id": "ocsp-15-min",
         "date": "2025-01-15",
         "title": "OCSP within 15 minutes of issuance",
@@ -1068,8 +1092,8 @@ CABF_DOCUMENTS = [
     {
         "id": "tls-br",
         "name": "TLS Baseline Requirements",
-        "version": "2.2.6",
-        "date": "Mar 2026",
+        "version": "2.2.8",
+        "date": "Jun 2026",
         "url": "https://cabforum.org/working-groups/server/baseline-requirements/documents/",
     },
     {
