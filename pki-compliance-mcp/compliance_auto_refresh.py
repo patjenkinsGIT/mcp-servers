@@ -36,6 +36,15 @@ LOG_FILE = DATA_DIR / "auto_refresh.log"
 MODEL = "claude-sonnet-4-20250514"
 INTER_QUERY_DELAY = 15  # seconds between API calls
 
+# --- Cost-control gating -----------------------------------------------------
+# The expensive web-search research only runs when (a) a tracked document
+# actually changed, (b) the weekly safety net is due, or (c) --force is given.
+# This is what stops the daily unconditional Anthropic API spend.
+PKI_CONTAINER = os.environ.get("PKI_CONTAINER", "pki-compliance-mcp")
+MAX_DAYS_BETWEEN_RESEARCH = int(os.environ.get("MAX_DAYS_BETWEEN_RESEARCH", "7"))
+LAST_RESEARCH_FILE = DATA_DIR / "last_research.json"
+REJECTED_FILE = DATA_DIR / "rejected.json"
+
 # ---------------------------------------------------------------------------
 # Research queries
 # ---------------------------------------------------------------------------
@@ -341,6 +350,172 @@ def log(message: str):
 
 
 # ---------------------------------------------------------------------------
+# Cost-control gating (decide whether to spend tokens at all)
+# ---------------------------------------------------------------------------
+
+# Pure-JSON one-liner run inside the MCP container; reuses the same machinery
+# as daily_doc_check.sh. Prints the check_all_documents JSON to stdout.
+_DETECT_SNIPPET = (
+    "import asyncio;"
+    "from pki_compliance_mcp import check_all_documents,CheckAllDocumentsInput,ResponseFormat;"
+    "print(asyncio.run(check_all_documents("
+    "CheckAllDocumentsInput(response_format=ResponseFormat.JSON))))"
+)
+
+
+def detect_document_changes() -> tuple[int, list[str]]:
+    """Cheap change detection via the container. No Anthropic API calls.
+
+    Returns (changes_detected, changed_doc_ids). changes_detected == -1 means
+    detection itself failed (container down, etc.).
+    """
+    try:
+        out = subprocess.run(
+            ["docker", "exec", PKI_CONTAINER, "python3", "-c", _DETECT_SNIPPET],
+            capture_output=True, text=True, timeout=300, check=True,
+        ).stdout.strip()
+        data = json.loads(out)
+        changed = [d["document_id"] for d in data.get("documents", []) if d.get("changed")]
+        return int(data.get("changes_detected", 0)), changed
+    except Exception as e:
+        log(f"WARNING: document change detection failed: {e}")
+        return -1, []
+
+
+def days_since_last_research() -> float:
+    """Days since research last actually ran. Large number if never."""
+    try:
+        ts = json.loads(LAST_RESEARCH_FILE.read_text())["timestamp"]
+        last = datetime.fromisoformat(ts)
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - last).total_seconds() / 86400.0
+    except Exception:
+        return 1e9
+
+
+def mark_research_ran() -> None:
+    LAST_RESEARCH_FILE.write_text(
+        json.dumps({"timestamp": datetime.now(timezone.utc).isoformat()})
+    )
+
+
+def should_run_research(force: bool) -> tuple[bool, str]:
+    """Gate the expensive research. Returns (run?, human-readable reason)."""
+    if force:
+        return True, "forced (--force)"
+
+    changes, changed_ids = detect_document_changes()
+    if changes > 0:
+        return True, f"{changes} document(s) changed: {', '.join(changed_ids)}"
+
+    stale_days = days_since_last_research()
+    if stale_days >= MAX_DAYS_BETWEEN_RESEARCH:
+        net = "weekly safety net" + (" (detector unavailable)" if changes == -1 else "")
+        return True, f"{net}: {stale_days:.1f}d since last research >= {MAX_DAYS_BETWEEN_RESEARCH}d"
+
+    if changes == -1:
+        return False, (
+            f"change detector unavailable and only {stale_days:.1f}d since last research "
+            f"(< {MAX_DAYS_BETWEEN_RESEARCH}d) — skipping to protect cost"
+        )
+    return False, f"no document changes; {stale_days:.1f}d since last research — skipping"
+
+
+# ---------------------------------------------------------------------------
+# Dedup (don't re-propose already-applied or previously-rejected items)
+# ---------------------------------------------------------------------------
+
+
+def _norm(s: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+
+
+def _sig(item: dict) -> str:
+    """Fuzzy signature: normalized title + date. Catches dupes with new ids."""
+    return f"{_norm(item.get('title'))}|{item.get('date', '')}"
+
+
+def load_rejected() -> dict:
+    try:
+        data = json.loads(REJECTED_FILE.read_text())
+        return {"ids": set(data.get("ids", [])), "signatures": set(data.get("signatures", []))}
+    except Exception:
+        return {"ids": set(), "signatures": set()}
+
+
+def reject_ids(ids: list[str]) -> int:
+    """Persist rejected item ids (+ signatures looked up from the latest
+    pending_updates file) so they never resurface. Returns total rejected."""
+    raw = {"ids": [], "signatures": []}
+    if REJECTED_FILE.exists():
+        raw = json.loads(REJECTED_FILE.read_text())
+    idset, sigset = set(raw.get("ids", [])), set(raw.get("signatures", []))
+
+    sigmap: dict[str, str] = {}
+    files = sorted(DATA_DIR.glob("pending_updates_*.json"))
+    if files:
+        try:
+            data = json.loads(files[-1].read_text())
+            for key in ("new_deadlines", "updated_deadlines", "regulatory_updates"):
+                for it in data.get(key, []):
+                    if it.get("id"):
+                        sigmap[it["id"]] = _sig(it)
+        except Exception:
+            pass
+
+    for iid in ids:
+        idset.add(iid)
+        if iid in sigmap:
+            sigset.add(sigmap[iid])
+
+    REJECTED_FILE.write_text(
+        json.dumps({"ids": sorted(idset), "signatures": sorted(sigset)}, indent=2)
+    )
+    return len(idset)
+
+
+def dedup_changes(changes: dict, current_data: dict | None) -> tuple[dict, list]:
+    """Drop proposals already in DEADLINES, already at the current doc version,
+    or previously rejected. Returns (filtered_changes, removed[list of tuples])."""
+    existing_ids, existing_sigs = set(), set()
+    if current_data:
+        for d in current_data.get("deadlines", []):
+            existing_ids.add(d.get("id"))
+            existing_sigs.add(_sig(d))
+    rej = load_rejected()
+    removed: list[tuple] = []
+
+    def keep(item: dict, kind: str) -> bool:
+        iid, sig = item.get("id"), _sig(item)
+        if iid in existing_ids or sig in existing_sigs:
+            removed.append((kind, iid, "already in DEADLINES"))
+            return False
+        if iid in rej["ids"] or sig in rej["signatures"]:
+            removed.append((kind, iid, "previously rejected"))
+            return False
+        return True
+
+    for key, kind in (("new_deadlines", "deadline"),
+                      ("updated_deadlines", "update"),
+                      ("regulatory_updates", "regulatory")):
+        if isinstance(changes.get(key), list):
+            changes[key] = [x for x in changes[key] if keep(x, kind)]
+
+    cur_docs = {d.get("id"): d.get("version") for d in (current_data or {}).get("cabfDocuments", [])}
+    if isinstance(changes.get("document_version_updates"), list):
+        kept = []
+        for u in changes["document_version_updates"]:
+            if cur_docs.get(u.get("id")) == u.get("new_version"):
+                removed.append(("doc", u.get("id"), "version already current"))
+            else:
+                kept.append(u)
+        changes["document_version_updates"] = kept
+
+    return changes, removed
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -350,13 +525,33 @@ def main():
     parser.add_argument("--auto-apply", action="store_true", help="Apply changes automatically")
     parser.add_argument("--dry-run", action="store_true", help="Print to stdout only, no files")
     parser.add_argument("--query-only", action="store_true", help="Run research queries only")
+    parser.add_argument("--force", action="store_true", help="Bypass the change gate and research now")
+    parser.add_argument("--reject", nargs="+", metavar="ID", help="Mark item id(s) as rejected so they stop recurring, then exit")
+    parser.add_argument("--list-rejected", action="store_true", help="Print the persisted rejected list and exit")
     args = parser.parse_args()
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     today = datetime.now().strftime("%Y-%m-%d")
 
+    # Maintenance subcommands (no API calls)
+    if args.list_rejected:
+        rej = load_rejected()
+        print(json.dumps({"ids": sorted(rej["ids"]), "signatures": sorted(rej["signatures"])}, indent=2))
+        return
+    if args.reject:
+        total = reject_ids(args.reject)
+        log(f"Rejected {len(args.reject)} item(s); {total} total on the rejected list")
+        return
+
     log(f"PKI Compliance Auto-Refresh starting - {today}")
     log(f"Mode: {'auto-apply' if args.auto_apply else 'dry-run' if args.dry_run else 'review'}")
+
+    # Step 0: Cost gate — only spend tokens when something actually changed.
+    run, reason = should_run_research(args.force)
+    log(f"Research gate: {'RUN' if run else 'SKIP'} — {reason}")
+    if not run:
+        log("No tracked changes. Skipping research — zero Anthropic API calls this run.")
+        return
 
     # Step 1: Run research queries
     research_results = {}
@@ -372,6 +567,9 @@ def main():
 
         if i < len(RESEARCH_QUERIES) - 1:
             time.sleep(INTER_QUERY_DELAY)
+
+    # Reset the staleness clock: research did run this cycle.
+    mark_research_ran()
 
     if args.query_only:
         log("Query-only mode - printing results")
@@ -394,6 +592,14 @@ def main():
     except Exception as e:
         log(f"ERROR analyzing diff: {e}")
         sys.exit(1)
+
+    # Step 3b: Dedup against live DEADLINES + previously rejected items, so the
+    # morning email never re-proposes things already handled.
+    changes, removed = dedup_changes(changes, current_data)
+    if removed:
+        log(f"Dedup removed {len(removed)} already-known/rejected item(s):")
+        for kind, iid, why in removed:
+            log(f"  - [{kind}] {iid}: {why}")
 
     # Step 4: Generate summary
     new_count = len(changes.get("new_deadlines", []))
@@ -420,6 +626,8 @@ def main():
         summary_lines.append(f"  - REGULATORY: {d.get('description', 'unknown')}")
     if review_count:
         summary_lines.append(f"  - NEEDS REVIEW: {review_count} item(s)")
+    if removed:
+        summary_lines.append(f"  - DEDUP: filtered {len(removed)} already-known/rejected item(s)")
 
     summary_lines.append(f"Summary: {changes.get('summary', 'N/A')}")
 
