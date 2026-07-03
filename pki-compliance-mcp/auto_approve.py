@@ -296,7 +296,10 @@ def main() -> int:
             car.log(f"auto_approve: applied {len(applied)} change(s), pushed, service restarted")
         except Exception as e:
             shutil.copy2(backup, filepath)
-            run(["git", "checkout", "--", "pki_compliance_mcp.py"], cwd=repo)
+            # checkout HEAD resets both index and worktree — a plain
+            # "checkout --" restores from the index, which may hold the
+            # staged patch if the commit itself failed.
+            run(["git", "checkout", "HEAD", "--", "pki_compliance_mcp.py"], cwd=repo)
             car.log(f"auto_approve: APPLY FAILED, rolled back — {e}")
             review += [("deadline", i, f"apply failed, rolled back: {e}") for i in auto_new]
             review += [("doc", u, f"apply failed, rolled back: {e}") for u in auto_docs]
