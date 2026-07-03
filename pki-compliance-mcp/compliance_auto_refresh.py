@@ -112,32 +112,36 @@ def research(prompt: str, max_retries: int = 3) -> str:
         raise RuntimeError("ANTHROPIC_API_KEY environment variable is not set")
 
     for attempt in range(max_retries):
-        with httpx.Client(timeout=180) as client:
-            response = client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": ANTHROPIC_API_KEY,
-                    "content-type": "application/json",
-                    "anthropic-version": "2023-06-01",
-                },
-                json={
-                    "model": MODEL,
-                    "max_tokens": 16000,
-                    "tools": [{"type": "web_search_20260209", "name": "web_search"}],
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-            )
-            if response.status_code == 429:
-                wait = 30 * (attempt + 1)
-                log(f"  Rate limited, waiting {wait}s (attempt {attempt+1}/{max_retries})")
-                time.sleep(wait)
-                continue
-            response.raise_for_status()
-            data = response.json()
-            return "\n".join(
-                block["text"] for block in data["content"] if block["type"] == "text"
-            )
-    raise RuntimeError(f"Rate limited after {max_retries} retries")
+        try:
+            with httpx.Client(timeout=httpx.Timeout(600.0, connect=10.0)) as client:
+                response = client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": ANTHROPIC_API_KEY,
+                        "content-type": "application/json",
+                        "anthropic-version": "2023-06-01",
+                    },
+                    json={
+                        "model": MODEL,
+                        "max_tokens": 16000,
+                        "tools": [{"type": "web_search_20260209", "name": "web_search"}],
+                        "messages": [{"role": "user", "content": prompt}],
+                    },
+                )
+        except httpx.TimeoutException:
+            log(f"  Timed out after 600s, retrying (attempt {attempt+1}/{max_retries})")
+            continue
+        if response.status_code == 429:
+            wait = 30 * (attempt + 1)
+            log(f"  Rate limited, waiting {wait}s (attempt {attempt+1}/{max_retries})")
+            time.sleep(wait)
+            continue
+        response.raise_for_status()
+        data = response.json()
+        return "\n".join(
+            block["text"] for block in data["content"] if block["type"] == "text"
+        )
+    raise RuntimeError(f"Rate limited or timed out after {max_retries} retries")
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +249,7 @@ def analyze_diff(research_results: dict, current_data: dict | None) -> dict:
         "Return ONLY the JSON object described in the system prompt."
     )
 
-    with httpx.Client(timeout=120) as client:
+    with httpx.Client(timeout=httpx.Timeout(600.0, connect=10.0)) as client:
         response = client.post(
             "https://api.anthropic.com/v1/messages",
             headers={
