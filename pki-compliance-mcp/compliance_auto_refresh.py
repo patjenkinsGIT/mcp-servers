@@ -33,7 +33,7 @@ PKI_REPO_PATH = os.environ.get("PKI_REPO_PATH", "/opt/mcp-servers/pki-compliance
 COMPLIANCE_API_URL = os.environ.get("COMPLIANCE_API_URL", "http://localhost:5000")
 DATA_DIR = Path.home() / ".pki-compliance-mcp"
 LOG_FILE = DATA_DIR / "auto_refresh.log"
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-sonnet-5"
 INTER_QUERY_DELAY = 15  # seconds between API calls
 
 # --- Cost-control gating -----------------------------------------------------
@@ -122,8 +122,8 @@ def research(prompt: str, max_retries: int = 3) -> str:
                 },
                 json={
                     "model": MODEL,
-                    "max_tokens": 4096,
-                    "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+                    "max_tokens": 16000,
+                    "tools": [{"type": "web_search_20260209", "name": "web_search"}],
                     "messages": [{"role": "user", "content": prompt}],
                 },
             )
@@ -255,7 +255,7 @@ def analyze_diff(research_results: dict, current_data: dict | None) -> dict:
             },
             json={
                 "model": MODEL,
-                "max_tokens": 4096,
+                "max_tokens": 16000,
                 "system": DIFF_SYSTEM_PROMPT,
                 "messages": [{"role": "user", "content": prompt}],
             },
@@ -581,8 +581,13 @@ def main():
         if i < len(RESEARCH_QUERIES) - 1:
             time.sleep(INTER_QUERY_DELAY)
 
-    # Reset the staleness clock: research did run this cycle.
-    mark_research_ran()
+    # Reset the staleness clock only if research actually produced results —
+    # otherwise the weekly safety net keeps retrying (a retired model 404'ing
+    # every call must not count as "research ran").
+    if any(not str(v).startswith("Error:") for v in research_results.values()):
+        mark_research_ran()
+    else:
+        log("All research queries failed — NOT marking research as ran (safety net stays armed)")
 
     if args.query_only:
         log("Query-only mode - printing results")
