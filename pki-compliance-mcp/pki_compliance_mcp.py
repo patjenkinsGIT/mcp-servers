@@ -164,6 +164,30 @@ MANUAL_CHECK_REQUIRED = [
 # "~ Est." badge), source_url (link to the authoritative source).
 DEADLINES = [
     {
+        "id": "chrome-digicert-legacy-roots-distrust",
+        "date": "2026-07-01",
+        "title": "Chrome distrust: DigiCert Trusted Root G4 / Assured ID G2/G3 (new issuance)",
+        "description": "Chrome Root Program removes DigiCert Trusted Root G4, Assured ID G2, and Assured ID G3 (not dedicated TLS hierarchies — they also issued Code Signing/Timestamp ICAs). TLS certificates issued on or after 2026-07-01 from these roots are not Chrome-trusted; certificates issued before remain trusted until expiry. New issuance and reissues must chain to DigiCert Global Root G2 (RSA) or G3 (ECC).",
+        "source": "chrome",
+        "source_url": "https://knowledge.digicert.com/alerts/google-chrome-root-removal-trusted-root-g4-assured-id-g2-id-g3",
+        "category": "root-store",
+        "isMajor": True,
+        "impact": "DigiCert customers on legacy roots must ensure new and reissued TLS certificates chain to Global Root G2 (RSA) or G3 (ECC) to remain Chrome-trusted.",
+        "is_estimated": False,
+    },
+    {
+        "id": "mozilla-dcr-audit-periods",
+        "date": "2027-07-01",
+        "title": "Mozilla DCRs required — audit periods starting on/after 2027-07-01",
+        "description": "Per MRSP v3.1, CA operators with TLS-enabled roots must obtain Detailed Controls Reports (DCRs) for audit periods beginning on or after July 1, 2027, giving Mozilla and auditors visibility into control design and operating effectiveness.",
+        "source": "mozilla",
+        "source_url": "https://blog.mozilla.org/security/2026/06/29/improving-transparency-and-assurance-in-the-web-pki-mozilla-root-store-policy-v3-1/",
+        "category": "audit",
+        "isMajor": True,
+        "impact": "CAs with TLS-enabled roots in the Mozilla program must engage auditors for Detailed Controls Reports covering audit periods starting on or after 2027-07-01.",
+        "is_estimated": False,
+    },
+    {
         "id": "chrome-cpcps-attestation-required",
         "date": "2026-06-15",
         "title": "Chrome CP/CPS Policy Adherence Attestation Required",
@@ -220,7 +244,7 @@ DEADLINES = [
         "id": "mozilla-mrsp-3-1-effective",
         "date": "2026-07-01",
         "title": "Mozilla Root Store Policy v3.1 Effective",
-        "description": "MRSP v3.1 takes effect, shifting focus to CA documentation transparency and audit reporting, including stricter CP/CPS content expectations under Section 3.3.",
+        "description": "MRSP v3.1 takes effect: root inclusion requests are accepted only for root CA key pairs generated no more than 5 years before submission, and CP/CPS documentation quality requirements are tightened (Section 3.3). Shifts focus to CA documentation transparency and audit reporting.",
         "source": "mozilla",
         "source_url": "https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/policy/",
         "category": "governance",
@@ -1238,7 +1262,7 @@ ROOT_STORES = [
     {
         "id": "mozilla",
         "name": "Mozilla Root Store Policy",
-        "version": "3.0",
+        "version": "3.1",
         "url": "https://wiki.mozilla.org/CA/Root_Store_Policy",
         "platforms": ["Firefox", "Thunderbird"],
         "keyRequirements": [
@@ -1959,9 +1983,9 @@ RELATED_RFCS = [
 
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
-    "lastUpdated": "2026-07-03",
-    "dataVersion": "2.4.0",
-    "basedOn": "CA/B Forum TLS BR 2.2.6, Code Signing BR 3.10, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.0, Apple Root Store Policy, Microsoft Trusted Root Program, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
+    "lastUpdated": "2026-07-05",
+    "dataVersion": "2.4.1",
+    "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
         "https://cabforum.org",
@@ -1978,11 +2002,11 @@ COMPLIANCE_METADATA = {
 }
 
 DATA_FRESHNESS = {
-    "lastFullReview": "2026-07-03",
-    "nextReviewDue": "2026-08-02",
+    "lastFullReview": "2026-07-05",
+    "nextReviewDue": "2026-08-04",
     "reviewIntervalDays": 30,
     "fieldVerifications": {
-        "deadlines": {"verified": "2026-07-03", "source": "All 73 deadlines verified against primary sources (CABF ballot pages, root program policies, EUR-Lex, national law texts); per-entry source_url added; 5 date/status errors corrected"},
+        "deadlines": {"verified": "2026-07-05", "source": "2026-07-05 review: Chrome distrust of DigiCert legacy roots (Trusted Root G4, Assured ID G2/G3) and Mozilla MRSP v3.1 DCR requirement added, both curl-verified against primary sources; MRSP v3.1 doc version bumped. Prior full verification 2026-07-03 against CABF ballot pages, root program policies, EUR-Lex, national law texts"},
         "rootStores": {"verified": "2026-05-14", "source": "Individual root program policies"},
         "algorithmRequirements": {"verified": "2026-05-14", "source": "CA/B Forum TLS BR 2.2.6, NIST FIPS 203/204/205, NIST SP 800-131A Rev 3"},
         "caChains": {"verified": "2026-05-14", "source": "Official CA documentation"},
