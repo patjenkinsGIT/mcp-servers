@@ -19,7 +19,7 @@ import re
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -453,6 +453,113 @@ def _sig(item: dict) -> str:
     return f"{_norm(item.get('title'))}|{item.get('date', '')}"
 
 
+# Review flags have no title/date and the model invents a different id every
+# day for the same topic, so they get their own signature: the set of "anchor"
+# tokens (ballot numbers, regulation names) found in id+description+reason.
+_REVIEW_ANCHOR_RE = re.compile(
+    r"\b("
+    r"sc-?\d{2,3}(?:v\d+)?"          # server cert ballots: SC087v2, SC101
+    r"|csc-?\d+(?:v\d+)?"            # code signing ballots: CSC-32
+    r"|smc-?\d{2,3}(?:v\d+)?"        # S/MIME ballots: SMC017v2
+    r"|cscwg-?\d+"
+    r"|nis-?2"
+    r"|dora"
+    r"|nspm-?12"
+    r"|eo-?14412"
+    r"|m-?2[0-9]-?\d{2}"             # OMB memos: M-23-02, M-26-15
+    r"|ir-?8\d{3}"                   # NIST IRs: 8547, 8647
+    r"|secure[ -]?boot"
+    r"|mrsp"
+    r"|cyber security and resilience|uk-?csr"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _review_sig(item) -> str:
+    """Signature for a needs_human_review flag, stable across model runs."""
+    if isinstance(item, dict):
+        text = " ".join(str(item.get(k) or "") for k in ("id", "description", "reason"))
+    else:
+        text = str(item)
+    anchors = {
+        re.sub(r"[\s-]", "", m.group(1).lower())
+        for m in _REVIEW_ANCHOR_RE.finditer(text)
+    }
+    if anchors:
+        return "anchors:" + "+".join(sorted(anchors))
+    return "text:" + " ".join(_norm(text).split()[:12])
+
+
+def load_prior_review_sigs(days: int = 14, exclude_date: str | None = None) -> dict:
+    """Map review-flag signature -> first-seen date from recent pending files,
+    so today's run can drop flags that are just yesterday's items re-worded."""
+    sigs: dict[str, str] = {}
+    cutoff = datetime.now(timezone.utc).date() - timedelta(days=days)
+    for f in sorted(DATA_DIR.glob("pending_updates_*.json")):
+        ds = f.stem.replace("pending_updates_", "")
+        if exclude_date and ds == exclude_date:
+            continue
+        try:
+            if datetime.strptime(ds, "%Y-%m-%d").date() < cutoff:
+                continue
+        except ValueError:
+            continue
+        try:
+            data = json.loads(f.read_text())
+        except Exception:
+            continue
+        for it in data.get("needs_human_review", []):
+            sigs.setdefault(_review_sig(it), ds)
+    return sigs
+
+
+def sanitize_changes(changes: dict) -> tuple[dict, list]:
+    """Drop malformed proposals the diff model sometimes emits (empty dicts,
+    items missing id or any human-readable text) before dedup/render."""
+    dropped: list[tuple] = []
+
+    def _label(it) -> str:
+        return (it.get("id") if isinstance(it, dict) else None) or str(it)[:60]
+
+    for key, required in (
+        ("new_deadlines", ("id", "title")),
+        ("updated_deadlines", ("id",)),
+        ("regulatory_updates", ("id", "title|description")),
+        ("document_version_updates", ("id", "new_version")),
+    ):
+        items = changes.get(key)
+        if not isinstance(items, list):
+            changes[key] = []
+            continue
+        kept = []
+        for it in items:
+            ok = isinstance(it, dict) and all(
+                any(it.get(f) for f in field.split("|")) for field in required
+            )
+            if ok:
+                kept.append(it)
+            else:
+                dropped.append((key, _label(it), f"malformed (missing {'/'.join(required)})"))
+        changes[key] = kept
+
+    review = changes.get("needs_human_review")
+    if not isinstance(review, list):
+        changes["needs_human_review"] = []
+    else:
+        kept = []
+        for it in review:
+            if isinstance(it, str) and it.strip():
+                kept.append({"id": None, "description": it.strip()})
+            elif isinstance(it, dict) and (it.get("description") or it.get("reason") or it.get("item")):
+                kept.append(it)
+            else:
+                dropped.append(("needs_human_review", _label(it), "malformed (empty)"))
+        changes["needs_human_review"] = kept
+
+    return changes, dropped
+
+
 def load_rejected() -> dict:
     try:
         data = json.loads(REJECTED_FILE.read_text())
@@ -478,6 +585,9 @@ def reject_ids(ids: list[str]) -> int:
                 for it in data.get(key, []):
                     if it.get("id"):
                         sigmap[it["id"]] = _sig(it)
+            for it in data.get("needs_human_review", []):
+                if isinstance(it, dict) and it.get("id"):
+                    sigmap[it["id"]] = _review_sig(it)
         except Exception:
             pass
 
@@ -492,9 +602,12 @@ def reject_ids(ids: list[str]) -> int:
     return len(idset)
 
 
-def dedup_changes(changes: dict, current_data: dict | None) -> tuple[dict, list]:
+def dedup_changes(changes: dict, current_data: dict | None,
+                  exclude_date: str | None = None) -> tuple[dict, list]:
     """Drop proposals already in DEADLINES, already at the current doc version,
-    or previously rejected. Returns (filtered_changes, removed[list of tuples])."""
+    or previously rejected. Review flags additionally dedup against the last
+    14 days of pending files (by anchor signature, since their ids are not
+    stable across runs). Returns (filtered_changes, removed[list of tuples])."""
     existing_ids, existing_sigs = set(), set()
     if current_data:
         for d in current_data.get("deadlines", []):
@@ -518,6 +631,20 @@ def dedup_changes(changes: dict, current_data: dict | None) -> tuple[dict, list]
                       ("regulatory_updates", "regulatory")):
         if isinstance(changes.get(key), list):
             changes[key] = [x for x in changes[key] if keep(x, kind)]
+
+    if isinstance(changes.get("needs_human_review"), list):
+        prior = load_prior_review_sigs(exclude_date=exclude_date)
+        kept = []
+        for it in changes["needs_human_review"]:
+            sig = _review_sig(it)
+            iid = it.get("id") if isinstance(it, dict) else str(it)[:60]
+            if sig in rej["signatures"]:
+                removed.append(("review", iid, "previously rejected"))
+            elif sig in prior:
+                removed.append(("review", iid, f"re-flagged; first seen {prior[sig]}"))
+            else:
+                kept.append(it)
+        changes["needs_human_review"] = kept
 
     cur_docs = {d.get("id"): d.get("version") for d in (current_data or {}).get("cabfDocuments", [])}
     if isinstance(changes.get("document_version_updates"), list):
@@ -615,9 +742,18 @@ def main():
         log(f"ERROR analyzing diff: {e}")
         sys.exit(1)
 
-    # Step 3b: Dedup against live DEADLINES + previously rejected items, so the
-    # morning email never re-proposes things already handled.
-    changes, removed = dedup_changes(changes, current_data)
+    # Step 3a: Drop malformed proposals (empty dicts, missing id/title) before
+    # they reach the review file and render as blank lines in the email.
+    changes, malformed = sanitize_changes(changes)
+    if malformed:
+        log(f"Sanitize dropped {len(malformed)} malformed item(s):")
+        for kind, iid, why in malformed:
+            log(f"  - [{kind}] {iid}: {why}")
+
+    # Step 3b: Dedup against live DEADLINES + previously rejected items + the
+    # last 14 days of review flags, so the morning email never re-proposes
+    # things already handled or re-nags about the same pending ballots.
+    changes, removed = dedup_changes(changes, current_data, exclude_date=today)
     if removed:
         log(f"Dedup removed {len(removed)} already-known/rejected item(s):")
         for kind, iid, why in removed:

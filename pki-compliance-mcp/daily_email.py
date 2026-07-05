@@ -59,20 +59,31 @@ def read_log_today(path: Path, date_str: str) -> list[str]:
     return [ln for ln in lines if date_str in ln]
 
 
-def doc_check_summary(log_lines: list[str]) -> dict:
+def doc_check_summary(log_lines: list[str], date_str: str) -> dict:
     """Parse the most recent daily_doc_check.sh run from doc_check.log.
 
-    Looks for the trailing block written by the script:
+    Takes the FULL log (not date-filtered lines): only the start/done markers
+    carry timestamps — the "changes_detected: N" and per-doc lines don't, so
+    filtering by date first would drop them (that bug made the header claim
+    "doc-check did not run" while the status section said it ran clean).
+
+    Looks for the block written by the script:
         checked_at: <iso>
         changes_detected: <n>
           <doc_id> <status> hash=<h>
     """
-    # Find the LAST "daily_doc_check start" marker today (if multiple runs)
-    starts = [i for i, ln in enumerate(log_lines) if "daily_doc_check start" in ln]
+    # Find the LAST "daily_doc_check start" marker with today's date
+    starts = [i for i, ln in enumerate(log_lines)
+              if "daily_doc_check start" in ln and date_str in ln]
     if not starts:
         return {"ran": False}
 
     section = log_lines[starts[-1]:]
+    # Bound the section at the next run's start marker, if any
+    for j, ln in enumerate(section[1:], start=1):
+        if "daily_doc_check start" in ln:
+            section = section[:j]
+            break
     checked_at = None
     changes_detected = None
     docs = []
@@ -161,8 +172,10 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
         parts.append(f"<strong>{len(approval.get('applied', []))}</strong> applied automatically, ")
         parts.append(f"<strong>{len(approval.get('queue', []))}</strong> queued for your review, ")
     parts.append(f"<strong>{needs_review_count}</strong> flagged for review, ")
-    if doc_changes is None:
+    if not doc_check.get("ran"):
         parts.append("<strong>doc-check did not run</strong>.")
+    elif doc_changes is None:
+        parts.append("doc-check ran, <strong>change count unavailable</strong>.")
     else:
         parts.append(f"<strong>{doc_changes}</strong> doc URL hash change(s) detected.")
     parts.append("</p>")
@@ -199,7 +212,9 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
         for d in pending.get("document_version_updates", []):
             parts.append(f"<li><strong>Doc bump</strong>: {escape(d.get('id',''))} → {escape(d.get('new_version',''))} <em>({escape(d.get('new_date',''))})</em></li>")
         for d in pending.get("regulatory_updates", []):
-            parts.append(f"<li><strong>Regulatory</strong>: {escape(d.get('regulation',''))} — {escape(d.get('update',''))[:120]}</li>")
+            reg_title = d.get("title") or d.get("regulation") or d.get("id") or ""
+            reg_desc = d.get("description") or d.get("update") or ""
+            parts.append(f"<li><strong>Regulatory</strong>: {escape(reg_title)} — {escape(reg_desc)[:160]}</li>")
         parts.append("</ul>")
     elif pending and "_parse_error" in pending:
         parts.append(f"<p style='color:#b91c1c;font:13px/1.4 -apple-system,system-ui,sans-serif'>⚠ Could not parse pending_updates_{date_str}.json: {escape(pending['_parse_error'])}</p>")
@@ -235,8 +250,13 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
         parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>Flagged for human review</h3>")
         parts.append("<ul style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding-left:20px'>")
         for item in pending["needs_human_review"]:
-            label = item.get("item") or item.get("reason") or json.dumps(item)
-            parts.append(f"<li>{escape(label)}</li>")
+            if isinstance(item, dict):
+                iid = item.get("id") or ""
+                desc = item.get("description") or item.get("item") or item.get("reason") or json.dumps(item)
+                label = f"{iid}: {desc}" if iid else desc
+            else:
+                label = str(item)
+            parts.append(f"<li>{escape(label[:300])}</li>")
         parts.append("</ul>")
 
     # Doc URL change detail (when there are any)
@@ -304,10 +324,12 @@ def main() -> int:
 
     pending = read_pending_updates(date_str)
     cron_log = read_log_today(DATA_DIR / "cron.log", date_str)
-    doc_log = read_log_today(DATA_DIR / "doc_check.log", date_str)
+    # Doc log must NOT be date-filtered: its data lines lack timestamps.
+    doc_log_path = DATA_DIR / "doc_check.log"
+    doc_log = doc_log_path.read_text(errors="replace").splitlines() if doc_log_path.exists() else []
 
     auto_refresh = auto_refresh_summary(cron_log)
-    doc_check = doc_check_summary(doc_log)
+    doc_check = doc_check_summary(doc_log, date_str)
     approval = read_approval(date_str)
 
     proposed = 0

@@ -94,6 +94,87 @@ check("doc update at current version dropped",
       [u["id"] for u in filtered["document_version_updates"]] == ["ev-guidelines"])
 check("removed log has 4 entries", len(removed) == 4)
 
+print("== sanitize_changes ==")
+with_tmp()
+changes = {
+    "new_deadlines": [
+        {"id": "good", "title": "Good", "date": "2026-09-01"},
+        {"id": "no-title"},                        # drop: no title
+        {},                                        # drop: empty
+        "not-a-dict",                              # drop: wrong type
+    ],
+    "updated_deadlines": [{"id": "upd-ok"}, {"title": "no id"}],
+    "regulatory_updates": [
+        {"id": "reg-ok", "title": "Reg", "description": "d"},
+        {"id": "reg-empty"},                       # drop: no title/description
+    ],
+    "document_version_updates": [
+        {"id": "tls-br", "new_version": "9.9.9"},
+        {"id": "no-version"},                      # drop
+    ],
+    "needs_human_review": [
+        {"id": "flag-ok", "description": "desc", "reason": "r"},
+        "bare string flag",                        # wrapped into a dict
+        {},                                        # drop: empty
+    ],
+}
+sanitized, dropped = car.sanitize_changes(changes)
+check("keeps valid new deadline", [x["id"] for x in sanitized["new_deadlines"]] == ["good"])
+check("keeps id-only update", [x["id"] for x in sanitized["updated_deadlines"]] == ["upd-ok"])
+check("drops empty regulatory", [x["id"] for x in sanitized["regulatory_updates"]] == ["reg-ok"])
+check("drops versionless doc bump", [x["id"] for x in sanitized["document_version_updates"]] == ["tls-br"])
+check("wraps bare-string review flag",
+      any(x.get("description") == "bare string flag" for x in sanitized["needs_human_review"]))
+check("drops empty review flag", len(sanitized["needs_human_review"]) == 2)
+check("dropped log has 6 entries", len(dropped) == 6)
+
+print("== review-flag dedup across days ==")
+d = with_tmp()
+from datetime import datetime, timedelta, timezone
+TODAY = datetime.now(timezone.utc).date().isoformat()
+YDAY = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+# Yesterday's file flagged SC087v2 and CSC-32 under one set of ids…
+(d / f"pending_updates_{YDAY}.json").write_text(json.dumps({
+    "needs_human_review": [
+        {"id": "review-sc087v2-ev-guidelines-serialnumber",
+         "description": "Ballot SC087v2 passed, in IPR review"},
+        {"id": "review-csc-32-code-signing-oid-ballot",
+         "description": "Ballot CSC-32 passed, IPR review ends mid-July"},
+    ],
+}))
+# …today the model re-flags the same topics under brand-new ids.
+changes = {
+    "new_deadlines": [], "updated_deadlines": [],
+    "document_version_updates": [], "regulatory_updates": [],
+    "needs_human_review": [
+        {"id": "sc087v2-ev-registration-number-ipr-pending",
+         "description": "SC087v2 remains in IPR Review Period"},
+        {"id": "csc-32-mandatory-policy-oid-ipr-pending",
+         "description": "CSC-32 in its IPR Review Period"},
+        {"id": "totally-new-thing",
+         "description": "A brand new unrelated concern about OCSP responders"},
+    ],
+}
+filtered, removed = car.dedup_changes(changes, None, exclude_date=TODAY)
+kept_ids = [x["id"] for x in filtered["needs_human_review"]]
+check("re-flagged SC087v2 dropped despite new id",
+      "sc087v2-ev-registration-number-ipr-pending" not in kept_ids)
+check("re-flagged CSC-32 dropped despite new id",
+      "csc-32-mandatory-policy-oid-ipr-pending" not in kept_ids)
+check("genuinely new flag kept", kept_ids == ["totally-new-thing"])
+check("removal reasons cite first-seen date",
+      all(f"first seen {YDAY}" in why for _, _, why in removed))
+# Same-day file must be excluded, or a rerun would drop everything.
+(d / f"pending_updates_{TODAY}.json").write_text(json.dumps({
+    "needs_human_review": [{"id": "totally-new-thing",
+                            "description": "A brand new unrelated concern about OCSP responders"}],
+}))
+changes["needs_human_review"] = [{"id": "totally-new-thing",
+                                  "description": "A brand new unrelated concern about OCSP responders"}]
+filtered, _ = car.dedup_changes(changes, None, exclude_date=TODAY)
+check("today's own file excluded from dedup",
+      [x["id"] for x in filtered["needs_human_review"]] == ["totally-new-thing"])
+
 print("== reject_ids persistence ==")
 d = with_tmp()
 (d / "pending_updates_2026-06-18.json").write_text(json.dumps({

@@ -85,8 +85,11 @@ DOCUMENTS = {
         "priority": "high",
     },
     "mozilla_root_policy": {
+        # Track the canonical policy source, not the wiki landing page — the
+        # wiki page carries no version text and its hash never changed when
+        # MRSP v3.1 shipped (missed on 2026-07-01).
         "name": "Mozilla Root Store Policy",
-        "url": "https://wiki.mozilla.org/CA/Root_Store_Policy",
+        "url": "https://raw.githubusercontent.com/mozilla/pkipolicy/master/rootstore/policy.md",
         "priority": "high",
     },
     "apple_root_program": {
