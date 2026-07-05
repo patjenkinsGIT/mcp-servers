@@ -126,7 +126,8 @@ check("drops versionless doc bump", [x["id"] for x in sanitized["document_versio
 check("wraps bare-string review flag",
       any(x.get("description") == "bare string flag" for x in sanitized["needs_human_review"]))
 check("drops empty review flag", len(sanitized["needs_human_review"]) == 2)
-check("dropped log has 6 entries", len(dropped) == 6)
+# 3 new_deadlines + 1 update + 1 regulatory + 1 doc bump + 1 review flag
+check("dropped log has 7 entries", len(dropped) == 7)
 
 print("== review-flag dedup across days ==")
 d = with_tmp()
