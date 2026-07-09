@@ -190,6 +190,10 @@ DEADLINES = [
         "isMajor": True,
         "impact": "CAs with TLS-enabled roots in the Mozilla program must engage auditors for Detailed Controls Reports covering audit periods starting on or after 2027-07-01.",
         "is_estimated": False,
+        "consequences": {
+            "enforcement": "CAs with TLS-enabled roots in the Mozilla program must obtain Detailed Controls Reports for audit periods starting on or after this date; failure risks root-program action.",
+            "scenario": "No action for most organizations unless you operate a publicly-trusted CA. Indirect benefit: more auditor visibility into the CAs you rely on.",
+        },
     },
     {
         "id": "chrome-cpcps-attestation-required",
@@ -267,6 +271,10 @@ DEADLINES = [
         "isMajor": True,
         "impact": "CAs must finalize updated CP/CPS documentation meeting enhanced content and audit transparency standards.",
         "is_estimated": False,
+        "consequences": {
+            "enforcement": "CAs must have CP/CPS documentation meeting MRSP v3.1's enhanced content and transparency standards.",
+            "scenario": "CA-facing only. Worth noting in vendor reviews; not an enterprise work item.",
+        },
     },
     {
         "id": "ocsp-15-min",
@@ -447,6 +455,10 @@ DEADLINES = [
         "source_url": "https://www.sectigo.com/resource-library/deprecation-of-client-authentication-eku-from-sectigo-ssl-tls-certificates",
         "category": "eku",
         "isMajor": True,
+        "consequences": {
+            "enforcement": "Sectigo stops including the clientAuth EKU in all public TLS certificates \u2014 hard deadline, no exceptions. Existing certificates are unaffected until renewal.",
+            "scenario": "An mTLS integration quietly breaks at renewal: the new cert passes every monitoring check (it is valid for serverAuth) but the partner's gateway rejects it on the EKU check. The failure looks like the partner's problem until someone diffs the old and new certs.",
+        },
     },
     {
         "id": "digicert-clientauth-removal",
@@ -459,6 +471,10 @@ DEADLINES = [
         "isMajor": True,
         "impact": "Organizations using DigiCert public TLS certs for mTLS must migrate before this date",
         "note": "DigiCert's timeline is more gradual than Sectigo (May 2026). Default removed Oct 1, 2025; manual opt-in available until March 1, 2027. Source: https://knowledge.digicert.com/alerts/sunsetting-client-authentication-eku-from-digicert-public-tls-certificates",
+        "consequences": {
+            "enforcement": "DigiCert permanently removes the clientAuth EKU option from CertCentral for all public TLS certificates (DV/OV/EV/QWAC).",
+            "scenario": "Same failure mode as the Sectigo removal \u2014 mTLS breaks at renewal, not on the deadline date. Anything using a DigiCert public cert as a client identity needs to be on private PKI before its first post-March renewal.",
+        },
     },
     {
         "id": "chrome-clientauth-leaf-sunset",
@@ -470,7 +486,11 @@ DEADLINES = [
         "category": "root-store",
         "isMajor": True,
         "impact": "mTLS with public certificates breaks - migrate to private CA",
-        "note": "Date moved from 2026-06-15 to 2027-03-15 in late January/early February 2026. Chrome cited market feedback and the volume of concurrent 2026 PKI changes as reasons for the extension."
+        "note": "Date moved from 2026-06-15 to 2027-03-15 in late January/early February 2026. Chrome cited market feedback and the volume of concurrent 2026 PKI changes as reasons for the extension.",
+        "consequences": {
+            "enforcement": "Chrome will not trust newly issued leaf certificates carrying both serverAuth and clientAuth EKUs. Existing certificates are trusted until expiry.",
+            "scenario": "This closes the last exit: even if a CA would still issue a dual-EKU cert, renewing one after this date means browsers reject your public-facing site. Dual-use certs need to be split \u2014 public cert for the site, private CA for the client identity \u2014 before their last pre-deadline renewal.",
+        },
     },
     {
         "id": "chrome-ct-prelogging-required",
@@ -540,6 +560,10 @@ DEADLINES = [
             "endorsers": ["Clint Wilson (Apple)", "Dimitris Zacharopoulos (HARICA)"],
             "sourceUrl": "https://github.com/cabforum/servercert/pull/645"
         },
+        "consequences": {
+            "enforcement": "All SHA-1-signed CA certificates (roots and intermediates) must be revoked and CRL signing must move to SHA-256 or stronger; CAs that miss it face misissuance findings and root-program scrutiny.",
+            "scenario": "A legacy appliance shipping a stale CA bundle keeps presenting a chain through a now-revoked SHA-1 intermediate \u2014 TLS handshakes start failing on clients that check revocation, and the fix is a chain-file update nobody has owned in years.",
+        },
     },
     {
         "id": "chrome-subca-automation-required",
@@ -550,7 +574,11 @@ DEADLINES = [
         "source_url": "https://www.chromium.org/Home/chromium-security/root-ca-policy/",
         "category": "automation",
         "isMajor": True,
-        "impact": "All publicly-trusted subordinate CAs must support automation"
+        "impact": "All publicly-trusted subordinate CAs must support automation",
+        "consequences": {
+            "enforcement": "Every unexpired subordinate CA under a Chrome Root Store root must be integrated with certificate lifecycle automation; non-compliant hierarchies risk phase-out from the root store.",
+            "scenario": "No direct action for most organizations \u2014 but a CA that cannot comply puts its whole hierarchy at phase-out risk, which becomes your problem if it is the hierarchy your certs chain to. A reasonable vendor-review question for your CA this year.",
+        },
     },
     {
         "id": "validity-100-days",
@@ -561,6 +589,10 @@ DEADLINES = [
         "source_url": "https://cabforum.org/2025/04/11/ballot-sc081v3-introduce-schedule-of-reducing-validity-and-data-reuse-periods/",
         "category": "certificates",
         "isMajor": True,
+        "consequences": {
+            "enforcement": "CAs cannot issue public TLS certificates valid longer than 100 days, and domain-validation reuse drops to 100 days (SC-081v3 schedule; drops again to 47 days in 2029).",
+            "scenario": "Every manual renewal process goes from an annual calendar reminder to roughly four touches per certificate per year. A team managing 200 certs by spreadsheet goes from ~200 renewal events to ~800 \u2014 the missed-renewal outage stops being a question of if. This is the deadline that makes ACME automation a prerequisite rather than a nice-to-have.",
+        },
     },
     {
         "id": "sc090-phone-validation-sunset",
@@ -572,6 +604,10 @@ DEADLINES = [
         "category": "validation",
         "isMajor": True,
         "impact": "Organizations using phone-based validation must migrate to automated methods",
+        "consequences": {
+            "enforcement": "All phone-, fax-, SMS-, and mail-based domain-control validation methods are prohibited (SC-090); CAs must use DNS/HTTP-based challenges only.",
+            "scenario": "Organizations that lean on phone validation for oddball domains \u2014 acquired brands, domains whose DNS is controlled by another business unit \u2014 find they cannot renew at all until they get DNS or HTTP access sorted. The blocker is not technical, it is organizational, which is why it is worth starting a year early.",
+        },
     },
     {
         "id": "sc091-reverse-lookup-sunset",
@@ -850,6 +886,10 @@ DEADLINES = [
         "framework_id": "nist",
         "framework_name": "NIST",
         "jurisdiction": "us",
+        "consequences": {
+            "enforcement": "NIST CMVP moves remaining FIPS 140-2 certificates to Historical status; federal agencies should not include Historical modules in new procurements. Modules keep running \u2014 nothing breaks at runtime.",
+            "scenario": "A contract renewal or ATO package citing a 140-2-only module gets flagged by the assessor; CMMC Level 2 and FedRAMP evidence chains need re-papering against FIPS 140-3 validations, which have long queues.",
+        },
     },
     {
         "id": "cnsa-2-nss-acquisition-begins",
@@ -877,6 +917,10 @@ DEADLINES = [
         "framework_id": "cabforum",
         "framework_name": "CA/Browser Forum",
         "jurisdiction": "global",
+        "consequences": {
+            "enforcement": "CAs must process RFC 8657 CAA parameters (accounturi, validationmethods) instead of ignoring them.",
+            "scenario": "Cuts both ways. Configured well, your CAA records become a real control \u2014 issuance is pinned to your ACME account, so a stolen DNS foothold elsewhere cannot mint certs for your domains. Configured badly, a typo'd accounturi silently blocks your own renewals starting on the effective date. Audit CAA records before March 2027.",
+        },
     },
     {
         "id": "chrome-root-consolidation-phaseout",
@@ -888,6 +932,10 @@ DEADLINES = [
         "category": "root-store",
         "isMajor": True,
         "impact": "CA Owners with more than two roots in the Chrome Root Store must have excess roots in phase-out; certificates issued from phased-out roots after their declared dates are not trusted by default.",
+        "consequences": {
+            "enforcement": "The Chrome Root Store enforces a maximum of two self-signed roots per CA Owner; certificates issued from a phased-out root after its declared date are not trusted by default (already-issued certs remain trusted until expiry).",
+            "scenario": "If your CA is consolidating, renewals may start chaining to a different root than the one your infrastructure expects. Anything that pins roots \u2014 mobile apps, IoT fleets, agent software with bundled trust stores \u2014 breaks not on the deadline, but on the first renewal that lands on the new chain. Ask your CA which roots survive and check your pins against that list.",
+        },
     },
     {
         "id": "nist-800-131a-112bit-disallowed",
@@ -2023,7 +2071,7 @@ RELATED_RFCS = [
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
     "lastUpdated": "2026-07-09",
-    "dataVersion": "2.4.2",
+    "dataVersion": "2.4.3",
     "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
