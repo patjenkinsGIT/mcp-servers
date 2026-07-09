@@ -865,6 +865,31 @@ DEADLINES = [
         "jurisdiction": "us",
     },
     {
+        "id": "cabf-sc098v2-caa-parameters",
+        "date": "2027-03-15",
+        "title": "CA/B Forum SC098v2 — CAA parameter processing (RFC 8657) required",
+        "description": "Ballot SC098v2 ('Process RFC 8657 CAA Parameters', TLS BR 2.2.8) requires CAs to process the RFC 8657 CAA parameters accounturi and validationmethods rather than ignoring them, and defines required syntax for non-ACME validation methods. Passed 2026-05-11 (22-1); IPR review completed 2026-06-12. Requirements take effect March 15, 2027.",
+        "source": "cab-forum",
+        "source_url": "https://cabforum.org/2026/05/13/ballot-sc098v2-process-rfc-8657-caa-parameters/",
+        "category": "validation",
+        "isMajor": True,
+        "impact": "CAs must implement RFC 8657 CAA parameter processing (accounturi, validationmethods) prior to certificate issuance by this date.",
+        "framework_id": "cabforum",
+        "framework_name": "CA/Browser Forum",
+        "jurisdiction": "global",
+    },
+    {
+        "id": "chrome-root-consolidation-phaseout",
+        "date": "2027-09-15",
+        "title": "Chrome Root Store two-roots-per-CA-Owner cap takes effect",
+        "description": "Chrome Root Program Policy v1.8 §1.2.1: consolidation plans (due 2026-06-15) from CA Owners with more than two self-signed roots must declare phase-out dates for excess roots falling before September 15, 2027 (00:00 UTC); effective that date the Chrome Root Store enforces a maximum of two self-signed root CA certificates per CA Owner. Roots in active phase-out are excluded from the cap and case-by-case extensions are possible. Phase-out is an SCTNotAfter constraint: certificates issued before the phase-out date remain trusted until expiry.",
+        "source": "chrome",
+        "source_url": "https://googlechrome.github.io/chromerootprogram/#121-maximum-number-of-cas-per-ca-owner",
+        "category": "root-store",
+        "isMajor": True,
+        "impact": "CA Owners with more than two roots in the Chrome Root Store must have excess roots in phase-out; certificates issued from phased-out roots after their declared dates are not trusted by default.",
+    },
+    {
         "id": "nist-800-131a-112bit-disallowed",
         "date": "2030-12-31",
         "title": "NIST SP 800-131A Rev 3 — 112-bit security strength disallowed",
@@ -1174,7 +1199,17 @@ REGULATORY_FRAMEWORKS = [
         "applies_to": ["National Security Systems", "Defense contractors", "Intelligence community", "Critical infrastructure handling classified data"],
         "certificate_relevance": "PQC algorithm requirements for certificates, key exchange, and signatures. Defines timeline for exclusive PQC usage.",
         "resource_link": "https://www.nsa.gov/Cybersecurity/Post-Quantum-Cybersecurity-Resources/",
-        "deadlines": []
+        "deadlines": [
+            {
+                "id": "nspm-12-cnss-governance",
+                "title": "NSPM-12 — NSS cybersecurity governance overhauled",
+                "date": "2026-06-12",
+                "source_url": "https://www.whitehouse.gov/presidential-actions/2026/06/national-security-presidential-memorandum-nspm-12/",
+                "category": "regulatory",
+                "impact": "medium",
+                "description": "NSPM-12 (signed June 12, 2026) rescinds NSD-42 (1990) and NSM-8 (2022), re-establishes the Committee on National Security Systems (CNSS) with binding directive authority, and designates the Director of NSA as National Manager for National Security Systems. Cryptographic requirements for NSS continue to flow through CNSSP 15, the policy vehicle for CNSA."
+            }
+        ]
     }
 ]
 
@@ -1987,9 +2022,9 @@ RELATED_RFCS = [
 
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
-    "lastUpdated": "2026-07-05",
-    "dataVersion": "2.4.1",
-    "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
+    "lastUpdated": "2026-07-09",
+    "dataVersion": "2.4.2",
+    "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
         "https://cabforum.org",
@@ -2006,11 +2041,11 @@ COMPLIANCE_METADATA = {
 }
 
 DATA_FRESHNESS = {
-    "lastFullReview": "2026-07-05",
-    "nextReviewDue": "2026-08-04",
+    "lastFullReview": "2026-07-09",
+    "nextReviewDue": "2026-08-08",
     "reviewIntervalDays": 30,
     "fieldVerifications": {
-        "deadlines": {"verified": "2026-07-05", "source": "2026-07-05 review: Chrome distrust of DigiCert legacy roots (Trusted Root G4, Assured ID G2/G3) and Mozilla MRSP v3.1 DCR requirement added, both curl-verified against primary sources; MRSP v3.1 doc version bumped. Prior full verification 2026-07-03 against CABF ballot pages, root program policies, EUR-Lex, national law texts"},
+        "deadlines": {"verified": "2026-07-09", "source": "2026-07-09 review: SC098v2 CAA parameter processing (effective 2027-03-15) verified against cabforum.org ballot post; Chrome two-roots-per-owner cap (2027-09-15) verified against Chrome Root Program Policy v1.8 §1.2.1; NSPM-12 governance entry verified against whitehouse.gov memo text. Prior review 2026-07-05 (Chrome DigiCert legacy distrust, Mozilla MRSP v3.1 DCRs)"},
         "rootStores": {"verified": "2026-05-14", "source": "Individual root program policies"},
         "algorithmRequirements": {"verified": "2026-05-14", "source": "CA/B Forum TLS BR 2.2.6, NIST FIPS 203/204/205, NIST SP 800-131A Rev 3"},
         "caChains": {"verified": "2026-05-14", "source": "Official CA documentation"},
