@@ -16,6 +16,7 @@ Usage:
 
 import json
 import hashlib
+import re
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
@@ -3205,8 +3206,20 @@ async def fetch_url(url: str, timeout: float = 30.0) -> Optional[str]:
     except Exception as e:
         return None
 
+# Per-request dynamic content that makes document hashes churn without any
+# real document change (seen daily on csrc.nist.gov behind Cloudflare):
+# challenge <script> params, email-protection href tokens, data-cfemail attrs.
+_HASH_NOISE_PATTERNS = [
+    re.compile(r"<script\b.*?</script>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"/cdn-cgi/l/email-protection#[0-9a-f]+"),
+    re.compile(r'data-cfemail="[0-9a-f]+"'),
+]
+
+
 def hash_content(content: str) -> str:
-    """Generate SHA-256 hash of content."""
+    """Generate SHA-256 hash of content, ignoring per-request dynamic noise."""
+    for pat in _HASH_NOISE_PATTERNS:
+        content = pat.sub("", content)
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 def parse_feed(content: str) -> List[Dict[str, Any]]:
