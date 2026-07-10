@@ -481,18 +481,25 @@ _REVIEW_ANCHOR_RE = re.compile(
 )
 
 
+# Grammatical variants of the same topic must produce identical anchor tokens.
+_ANCHOR_CANON = {
+    "crosssigned": "crosssign",
+    "crosssigning": "crosssign",
+    "kerneldrivers": "kerneldriver",
+}
+
+
 def _review_sig(item) -> str:
     """Signature for a needs_human_review flag, stable across model runs."""
     if isinstance(item, dict):
         text = " ".join(str(item.get(k) or "") for k in ("id", "description", "reason"))
     else:
         text = str(item)
-    anchors = set()
-    for m in _REVIEW_ANCHOR_RE.finditer(text):
-        a = re.sub(r"[\s-]", "", m.group(1).lower())
-        if a.isalpha():  # crosssigned/crosssigning/kerneldrivers -> one token
-            a = re.sub(r"(?:ed|ing|s)$", "", a)
-        anchors.add(a)
+    anchors = {
+        _ANCHOR_CANON.get(a, a)
+        for a in (re.sub(r"[\s-]", "", m.group(1).lower())
+                  for m in _REVIEW_ANCHOR_RE.finditer(text))
+    }
     if anchors:
         return "anchors:" + "+".join(sorted(anchors))
     return "text:" + " ".join(_norm(text).split()[:12])
