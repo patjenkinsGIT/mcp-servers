@@ -200,6 +200,14 @@ check("MS driver-signing reworded flag matches", ms_a == ms_b)
 check("Apple root program flag anchors",
       car._review_sig({"id": "review-apple-root-program-github-migration",
                        "description": "Apple Root Program policy publication moved to GitHub"}).startswith("anchors:"))
+check("hyphenated apple id alone anchors",
+      car._review_sig({"id": "apple-root-program-url-change",
+                       "description": "policy URL should be updated"}).startswith("anchors:"))
+check("dedicated-TLS flag anchors and matches reworded",
+      car._review_sig({"id": "review-chrome-v1-8-dedicated-tls-phaseout-start",
+                       "description": "phasing out dedicated TLS violators"})
+      == car._review_sig({"id": "chrome-dedicated-tls-enforcement-start",
+                          "description": "Chrome dedicated-TLS hierarchy enforcement began June 15"}))
 
 print("== reject_ids persistence ==")
 d = with_tmp()

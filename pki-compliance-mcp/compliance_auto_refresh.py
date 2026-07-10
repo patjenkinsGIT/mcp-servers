@@ -473,7 +473,8 @@ _REVIEW_ANCHOR_RE = re.compile(
     r"|mrsp"
     r"|cross[ -]?sign(?:ed|ing)?"    # MS driver-signing / cross-sign trust removals
     r"|kernel[ -]?drivers?"
-    r"|apple root (?:certificate )?program"
+    r"|apple[ -]root[ -](?:certificate[ -])?program"
+    r"|dedicated[ -]tls"
     r"|cyber security and resilience|uk[ -]?csr"
     r")\b",
     re.IGNORECASE,
