@@ -458,19 +458,23 @@ def _sig(item: dict) -> str:
 # tokens (ballot numbers, regulation names) found in id+description+reason.
 _REVIEW_ANCHOR_RE = re.compile(
     r"\b("
-    r"sc-?\d{2,3}(?:v\d+)?"          # server cert ballots: SC087v2, SC101
-    r"|csc-?\d+(?:v\d+)?"            # code signing ballots: CSC-32
-    r"|smc-?\d{2,3}(?:v\d+)?"        # S/MIME ballots: SMC017v2
-    r"|cscwg-?\d+"
-    r"|nis-?2"
+    r"sc[ -]?\d{2,4}(?:v\d+)?"       # server cert ballots: SC087v2, SC101, SC0101v2
+    r"|csc[ -]?\d+(?:v\d+)?"         # code signing ballots: CSC-32
+    r"|smc[ -]?\d{2,4}(?:v\d+)?"     # S/MIME ballots: SMC017v2
+    r"|cscwg[ -]?\d+"
+    r"|nis[ -]?2"
     r"|dora"
-    r"|nspm-?12"
-    r"|eo-?14412"
-    r"|m-?2[0-9]-?\d{2}"             # OMB memos: M-23-02, M-26-15
-    r"|ir-?8\d{3}"                   # NIST IRs: 8547, 8647
+    r"|nspm[ -]?12"
+    r"|eo[ -]?14\d{3}"               # executive orders: EO 14412, EO 14413
+    r"|m[ -]?2[0-9][ -]?\d{2}"       # OMB memos: M-23-02, M-26-15
+    r"|ir[ -]?8\d{3}"                # NIST IRs: 8547, 8647
+    r"|sp[ -]?800[ -]?\d{2,3}[a-d]?" # NIST SPs: SP 800-73, 800-131A
     r"|secure[ -]?boot"
     r"|mrsp"
-    r"|cyber security and resilience|uk-?csr"
+    r"|cross[ -]?sign(?:ed|ing)?"    # MS driver-signing / cross-sign trust removals
+    r"|kernel[ -]?driver"
+    r"|apple root (?:certificate )?program"
+    r"|cyber security and resilience|uk[ -]?csr"
     r")\b",
     re.IGNORECASE,
 )

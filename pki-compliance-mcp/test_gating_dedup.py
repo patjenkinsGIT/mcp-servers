@@ -176,6 +176,31 @@ filtered, _ = car.dedup_changes(changes, None, exclude_date=TODAY)
 check("today's own file excluded from dedup",
       [x["id"] for x in filtered["needs_human_review"]] == ["totally-new-thing"])
 
+print("== review-flag anchor extraction (2026-07-10 regressions) ==")
+# 4-digit zero-padded ballots must anchor (SC0101v2 fell through to text: sig)
+sig_a = car._review_sig({"id": "cabf-sc0101v2-adn-transition",
+                         "description": "Ballot SC0101v2 passed but IPR review incomplete"})
+sig_b = car._review_sig({"id": "review-sc0101v2-adn-clarification",
+                         "description": "SC0101v2 (Clarify Authorization Domain Names) reworded flag"})
+check("SC0101v2 gets an anchor sig", sig_a.startswith("anchors:"))
+check("SC0101v2 reworded flag matches", sig_a == sig_b)
+# Space-separated references must anchor ("EO 14412" missed eo-?14412)
+check("'EO 14412' with space anchors",
+      car._review_sig({"id": "x", "description": "restates existing EO 14412"}).startswith("anchors:"))
+check("'M-26-15' and 'M 26 15' agree",
+      car._review_sig({"id": "x", "description": "OMB M-26-15 five-phase"})
+      == car._review_sig({"id": "y", "description": "OMB memo M 26 15 schedule"}))
+# Recurring un-anchored topics now have anchor classes
+ms_a = car._review_sig({"id": "microsoft-kernel-driver-crosssign-removal",
+                        "description": "removal of trust for kernel drivers signed by the deprecated cross-signed root program"})
+ms_b = car._review_sig({"id": "review-microsoft-legacy-driver-trust-removal",
+                        "description": "Microsoft reportedly announced removal of trust for kernel drivers, cross-signed, uptime logic change"})
+check("MS driver-signing flag gets anchor sig", ms_a.startswith("anchors:"))
+check("MS driver-signing reworded flag matches", ms_a == ms_b)
+check("Apple root program flag anchors",
+      car._review_sig({"id": "review-apple-root-program-github-migration",
+                       "description": "Apple Root Program policy publication moved to GitHub"}).startswith("anchors:"))
+
 print("== reject_ids persistence ==")
 d = with_tmp()
 (d / "pending_updates_2026-06-18.json").write_text(json.dumps({
