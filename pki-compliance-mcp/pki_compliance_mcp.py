@@ -95,7 +95,11 @@ DOCUMENTS = {
     },
     "apple_root_program": {
         "name": "Apple Root Certificate Program",
-        "url": "https://www.apple.com/certificateauthority/ca_program.html",
+        # Authoritative publication point moved to GitHub (repo created 2026-02-19;
+        # README calls it authoritative). Old apple.com page still serves the policy
+        # but no longer canonical. Hash the raw markdown — stable, no page chrome.
+        "url": "https://github.com/apple/apple-root-program",
+        "check_url": "https://raw.githubusercontent.com/apple/apple-root-program/main/policy.md",
         "priority": "medium",
     },
     "microsoft_root_program": {
@@ -952,6 +956,60 @@ DEADLINES = [
         "jurisdiction": "us",
     },
     {
+        "id": "chrome-dedicated-tls-enforcement",
+        "date": "2026-06-15",
+        "title": "Chrome begins phasing out non-dedicated-TLS hierarchies",
+        "description": "Chrome Root Program Policy v1.8 §1.3.2: beginning June 15, 2026, Chrome phases out PKI hierarchies found in violation of dedicated-TLS requirements — sub-CAs disclosed on/after this date must assert only id-kp-serverAuth. Violations detected after this date get a phase-out date set 90 calendar days following detection (Chrome retains case-by-case discretion). Distinct from the March 15, 2027 leaf-certificate dual-EKU sunset.",
+        "source": "chrome",
+        "source_url": "https://googlechrome.github.io/chromerootprogram/#132-promote-use-of-dedicated-tls-server-authentication-pki-hierarchies",
+        "category": "root-store",
+        "isMajor": False,
+        "impact": "CA hierarchies mixing TLS with other use cases are now subject to rolling 90-day phase-outs on detection.",
+        "status": "ongoing",
+        "consequences": {
+            "enforcement": "Hierarchies found violating the dedicated-TLS requirements receive a phase-out date 90 calendar days after detection; certificates issued after that date are not trusted by default in Chrome.",
+            "scenario": "No action for most organizations unless you operate a CA. Indirect exposure: if your CA's hierarchy is phased out, your renewals may need to move to a different hierarchy — worth asking your CA whether their sub-CAs are serverAuth-only.",
+        },
+    },
+    {
+        "id": "omb-m-26-15-pqc-plan-due",
+        "date": "2026-10-22",
+        "title": "OMB M-26-15: agency PQC migration plans due to OMB and ONCD",
+        "description": "OMB Memo M-26-15 ('Execution of the Migration to Post-Quantum Cryptography', June 24, 2026) requires executive agencies to submit PQC migration plans to OMB and ONCD no later than 120 days from issuance (~October 22, 2026). Plans must follow the memo's five-phase schedule (discovery 2026-27, pilots 2027-28, prioritized key-establishment migration 2028-30, signature migration 2031, full migration by 2035), align with NIST IR 8547, and cover inventory tooling, crypto-agility, third parties, and funding. Does not apply to national security systems.",
+        "source": "nist",
+        "source_url": "https://www.whitehouse.gov/wp-content/uploads/2026/06/M-26-15-Execution-of-the-Migration-to-Post-Quantum-Cryptography.pdf",
+        "category": "pqc",
+        "isMajor": True,
+        "impact": "Federal agencies must deliver a compliant PQC migration plan; contractors and vendors should expect inventory and crypto-agility questions to flow down.",
+        "consequences": {
+            "enforcement": "M-26-15 directs agency heads to submit migration plans within 120 days; OMB and ONCD track submission and plan content against Appendix B requirements as part of FISMA oversight.",
+            "scenario": "An agency without a certificate and cryptography inventory cannot write a credible plan — the 120-day clock effectively makes crypto discovery a Q3 2026 fire drill. Vendors to federal agencies should expect data calls about PQC readiness and TLS 1.3 support as agencies scramble to fill Appendix B sections.",
+        },
+    },
+    {
+        "id": "federal-tls13-support-required",
+        "date": "2030-01-02",
+        "title": "Federal agencies must support TLS 1.3 (M-26-15 / EO 14306)",
+        "description": "OMB M-26-15 Appendix A §4 (restating EO 14306): agencies must support TLS 1.3 or a successor version no later than January 2, 2030. Agency PQC migration plans must include milestones toward this date.",
+        "source": "nist",
+        "source_url": "https://www.whitehouse.gov/wp-content/uploads/2026/06/M-26-15-Execution-of-the-Migration-to-Post-Quantum-Cryptography.pdf",
+        "category": "pqc",
+        "isMajor": False,
+        "impact": "Federal systems and services sold to agencies must support TLS 1.3 — a prerequisite for PQC key establishment (ML-KEM runs over TLS 1.3).",
+    },
+    {
+        "id": "omb-m-26-15-full-pqc-migration",
+        "date": "2035-12-31",
+        "title": "OMB M-26-15 Phase 5: full federal PQC migration target",
+        "description": "Final phase of the M-26-15 five-phase schedule: agencies should complete migration of remaining systems to PQC by 2035, risk-based and contingent on commercial availability. A planning target ('should'), not a hard mandate; the binding earlier milestones are 2030 (key establishment) and 2031 (signatures) per EO 14412.",
+        "source": "nist",
+        "source_url": "https://www.whitehouse.gov/wp-content/uploads/2026/06/M-26-15-Execution-of-the-Migration-to-Post-Quantum-Cryptography.pdf",
+        "category": "pqc",
+        "isMajor": False,
+        "impact": "End-state target for the federal PQC transition; aligns with the CNSA 2.0 exclusive-use horizon.",
+        "is_estimated": True,
+    },
+    {
         "id": "luxembourg-nis2-in-force",
         "date": "2026-05-10",
         "title": "Luxembourg NIS2 transposition — entry into force",
@@ -1374,7 +1432,7 @@ ROOT_STORES = [
         "id": "apple",
         "name": "Apple Root Certificate Program",
         "version": "2024",
-        "url": "https://www.apple.com/certificateauthority/ca_program.html",
+        "url": "https://github.com/apple/apple-root-program",
         "platforms": ["Safari", "iOS", "iPadOS", "macOS"],
         "keyRequirements": [
             "Certificate Transparency required",
@@ -2070,15 +2128,15 @@ RELATED_RFCS = [
 
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
-    "lastUpdated": "2026-07-09",
-    "dataVersion": "2.4.3",
+    "lastUpdated": "2026-07-10",
+    "dataVersion": "2.4.4",
     "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
         "https://cabforum.org",
         "https://g.co/chrome/root-policy",
         "https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/policy/",
-        "https://www.apple.com/certificateauthority/ca_program.html",
+        "https://github.com/apple/apple-root-program",
         "https://aka.ms/RootCert",
         "https://letsencrypt.org/certificates/",
         "https://www.sectigo.com/knowledge-base/detail/Sectigo-Root-Certificates",
@@ -2089,11 +2147,11 @@ COMPLIANCE_METADATA = {
 }
 
 DATA_FRESHNESS = {
-    "lastFullReview": "2026-07-09",
-    "nextReviewDue": "2026-08-08",
+    "lastFullReview": "2026-07-10",
+    "nextReviewDue": "2026-08-09",
     "reviewIntervalDays": 30,
     "fieldVerifications": {
-        "deadlines": {"verified": "2026-07-09", "source": "2026-07-09 review: SC098v2 CAA parameter processing (effective 2027-03-15) verified against cabforum.org ballot post; Chrome two-roots-per-owner cap (2027-09-15) verified against Chrome Root Program Policy v1.8 §1.2.1; NSPM-12 governance entry verified against whitehouse.gov memo text. Prior review 2026-07-05 (Chrome DigiCert legacy distrust, Mozilla MRSP v3.1 DCRs)"},
+        "deadlines": {"verified": "2026-07-10", "source": "2026-07-10 review: Chrome dedicated-TLS enforcement start (2026-06-15) verified against policy v1.8 §1.3.2; OMB M-26-15 plan deadline (2026-10-22), federal TLS 1.3 (2030-01-02), and 2035 full-migration target verified against memo PDF; Apple Root Program doc-check moved to authoritative GitHub repo. SMC017v2 held pending IPR completion (~2026-07-30). Prior review 2026-07-09 (SC098v2, Chrome root cap, NSPM-12)"},
         "rootStores": {"verified": "2026-05-14", "source": "Individual root program policies"},
         "algorithmRequirements": {"verified": "2026-05-14", "source": "CA/B Forum TLS BR 2.2.6, NIST FIPS 203/204/205, NIST SP 800-131A Rev 3"},
         "caChains": {"verified": "2026-05-14", "source": "Official CA documentation"},

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh root@134.199.198.164 \"cd /opt/mcp-servers && git pull origin main\")"
+    ]
+  }
+}

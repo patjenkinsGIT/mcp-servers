@@ -472,7 +472,7 @@ _REVIEW_ANCHOR_RE = re.compile(
     r"|secure[ -]?boot"
     r"|mrsp"
     r"|cross[ -]?sign(?:ed|ing)?"    # MS driver-signing / cross-sign trust removals
-    r"|kernel[ -]?driver"
+    r"|kernel[ -]?drivers?"
     r"|apple root (?:certificate )?program"
     r"|cyber security and resilience|uk[ -]?csr"
     r")\b",
@@ -486,10 +486,12 @@ def _review_sig(item) -> str:
         text = " ".join(str(item.get(k) or "") for k in ("id", "description", "reason"))
     else:
         text = str(item)
-    anchors = {
-        re.sub(r"[\s-]", "", m.group(1).lower())
-        for m in _REVIEW_ANCHOR_RE.finditer(text)
-    }
+    anchors = set()
+    for m in _REVIEW_ANCHOR_RE.finditer(text):
+        a = re.sub(r"[\s-]", "", m.group(1).lower())
+        if a.isalpha():  # crosssigned/crosssigning/kerneldrivers -> one token
+            a = re.sub(r"(?:ed|ing|s)$", "", a)
+        anchors.add(a)
     if anchors:
         return "anchors:" + "+".join(sorted(anchors))
     return "text:" + " ".join(_norm(text).split()[:12])
