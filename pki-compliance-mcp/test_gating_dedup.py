@@ -197,6 +197,12 @@ ms_b = car._review_sig({"id": "review-microsoft-legacy-driver-trust-removal",
                         "description": "Microsoft reportedly announced removal of trust for kernel drivers, cross-signed, uptime logic change"})
 check("MS driver-signing flag gets anchor sig", ms_a.startswith("anchors:"))
 check("MS driver-signing reworded flag matches", ms_a == ms_b)
+check("SC101v2 and SC0101v2 canonicalize to the same anchor",
+      car._review_sig({"id": "review-sc101v2-authorization-domain-names", "description": ""})
+      == car._review_sig({"id": "cabf-sc0101v2-adn-transition", "description": ""}))
+check("SMC017 and SMC017v2 canonicalize to the same anchor",
+      car._review_sig({"id": "x", "description": "Ballot SMC017 passed"})
+      == car._review_sig({"id": "y", "description": "SMC017v2 in IPR review"}))
 check("Apple root program flag anchors",
       car._review_sig({"id": "review-apple-root-program-github-migration",
                        "description": "Apple Root Program policy publication moved to GitHub"}).startswith("anchors:"))

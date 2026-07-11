@@ -504,11 +504,16 @@ def _review_sig(item) -> str:
         text = " ".join(str(item.get(k) or "") for k in ("id", "description", "reason"))
     else:
         text = str(item)
-    anchors = {
-        _ANCHOR_CANON.get(a, a)
-        for a in (re.sub(r"[\s-]", "", m.group(1).lower())
-                  for m in _REVIEW_ANCHOR_RE.finditer(text))
-    }
+    anchors = set()
+    for m in _REVIEW_ANCHOR_RE.finditer(text):
+        a = re.sub(r"[\s-]", "", m.group(1).lower())
+        a = _ANCHOR_CANON.get(a, a)
+        # Ballot references vary day to day in zero-padding and version suffix
+        # (SC101 / SC0101v2 / SC0101 are the same ballot family) — canonicalize.
+        b = re.match(r"^(sc|csc|smc|cscwg)0*(\d+)(?:v\d+)?$", a)
+        if b:
+            a = b.group(1) + b.group(2)
+        anchors.add(a)
     if anchors:
         return "anchors:" + "+".join(sorted(anchors))
     return "text:" + " ".join(_norm(text).split()[:12])

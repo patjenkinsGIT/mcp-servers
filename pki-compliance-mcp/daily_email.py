@@ -108,9 +108,13 @@ def outstanding_review_items(date_str: str, days: int = 14) -> list[dict]:
             rsig = car._review_sig(it)
             if it.get("id") in rejected["ids"] or rsig in rejected["signatures"]:
                 continue
+            title = (it.get("title") or it.get("id") or it.get("topic")
+                     or (it.get("description") or it.get("reason") or "")[:80])
+            if not title:
+                continue
             seen.setdefault(("flag", rsig), {
                 "kind": "flagged",
-                "title": it.get("title") or it.get("id") or (it.get("description") or "")[:80],
+                "title": title,
                 "date": "",
                 "first_seen": ds,
                 "urgent": bool(it.get("urgent")),
