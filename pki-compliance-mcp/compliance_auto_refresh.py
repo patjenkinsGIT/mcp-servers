@@ -501,7 +501,8 @@ _ANCHOR_CANON = {
 def _review_sig(item) -> str:
     """Signature for a needs_human_review flag, stable across model runs."""
     if isinstance(item, dict):
-        text = " ".join(str(item.get(k) or "") for k in ("id", "description", "reason"))
+        text = " ".join(str(item.get(k) or "")
+                        for k in ("id", "title", "topic", "description", "reason"))
     else:
         text = str(item)
     anchors = set()

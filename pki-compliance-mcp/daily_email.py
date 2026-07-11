@@ -78,6 +78,7 @@ def outstanding_review_items(date_str: str, days: int = 14) -> list[dict]:
     from datetime import timedelta
     cutoff = (datetime.now(timezone.utc).date() - timedelta(days=days)).isoformat()
     seen: dict = {}
+    rejected_sigs: set = set()  # a rejected id kills its whole same-topic bucket
     for f in sorted(DATA_DIR.glob("pending_updates_*.json")):
         ds = f.stem.replace("pending_updates_", "")
         if ds < cutoff or ds > date_str:
@@ -92,7 +93,10 @@ def outstanding_review_items(date_str: str, days: int = 14) -> list[dict]:
                 if not isinstance(it, dict):
                     continue
                 sig = car._sig(it)
-                if (it.get("id") in rejected["ids"] or sig in rejected["signatures"]
+                if it.get("id") in rejected["ids"]:
+                    rejected_sigs.add(("proposal", sig))
+                    continue
+                if (sig in rejected["signatures"]
                         or it.get("id") in live_ids or sig in live_sigs):
                     continue
                 seen.setdefault(("proposal", sig), {
@@ -106,7 +110,10 @@ def outstanding_review_items(date_str: str, days: int = 14) -> list[dict]:
             if not isinstance(it, dict):
                 it = {"description": str(it)}
             rsig = car._review_sig(it)
-            if it.get("id") in rejected["ids"] or rsig in rejected["signatures"]:
+            if it.get("id") in rejected["ids"]:
+                rejected_sigs.add(("flag", rsig))
+                continue
+            if rsig in rejected["signatures"]:
                 continue
             title = (it.get("title") or it.get("id") or it.get("topic")
                      or (it.get("description") or it.get("reason") or "")[:80])
@@ -119,7 +126,8 @@ def outstanding_review_items(date_str: str, days: int = 14) -> list[dict]:
                 "first_seen": ds,
                 "urgent": bool(it.get("urgent")),
             })
-    return sorted(seen.values(), key=lambda x: (not x["urgent"], x["first_seen"]))
+    return sorted((v for k, v in seen.items() if k not in rejected_sigs),
+                  key=lambda x: (not x["urgent"], x["first_seen"]))
 
 
 def read_log_today(path: Path, date_str: str) -> list[str]:
