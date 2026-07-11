@@ -495,6 +495,7 @@ _ANCHOR_CANON = {
     "crosssigned": "crosssign",
     "crosssigning": "crosssign",
     "kerneldrivers": "kerneldriver",
+    "cybersecurityandresilience": "ukcsr",
 }
 
 

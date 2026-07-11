@@ -200,6 +200,9 @@ check("MS driver-signing reworded flag matches", ms_a == ms_b)
 check("SC101v2 and SC0101v2 canonicalize to the same anchor",
       car._review_sig({"id": "review-sc101v2-authorization-domain-names", "description": ""})
       == car._review_sig({"id": "cabf-sc0101v2-adn-transition", "description": ""}))
+check("UK CSR spelled-out and abbreviated forms share an anchor",
+      car._review_sig({"id": "x", "description": "Cyber Security and Resilience Bill stage"})
+      == car._review_sig({"id": "review-uk-csr-bill-stage", "description": ""}))
 check("SMC017 and SMC017v2 canonicalize to the same anchor",
       car._review_sig({"id": "x", "description": "Ballot SMC017 passed"})
       == car._review_sig({"id": "y", "description": "SMC017v2 in IPR review"}))
