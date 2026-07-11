@@ -50,6 +50,74 @@ def read_pending_updates(date_str: str) -> dict | None:
         return {"_parse_error": str(e)}
 
 
+def outstanding_review_items(date_str: str, days: int = 14) -> list[dict]:
+    """Aggregate every unresolved queued/flagged item from recent pending files.
+
+    Makes each daily email show the full review backlog, so skipping a few
+    days of email costs nothing. An item is outstanding unless it was rejected
+    (id or signature) or — for proposals — already present in the live
+    compliance data (applied by auto-approve or a morning review). Review
+    flags collapse across days by anchor signature, keeping first-seen date.
+    Reuses the research pipeline's signature machinery so "same item" here
+    means exactly what it means to the dedup pass.
+    """
+    import compliance_auto_refresh as car
+
+    rejected = car.load_rejected()
+    live_ids: set = set()
+    live_sigs: set = set()
+    try:  # live data unavailable -> degrade to showing possibly-extra items
+        r = httpx.get("https://compliance-api.fixmycert.com/api/compliance-data", timeout=30)
+        r.raise_for_status()
+        for dl in r.json().get("deadlines", []):
+            live_ids.add(dl.get("id"))
+            live_sigs.add(car._sig(dl))
+    except Exception:
+        pass
+
+    from datetime import timedelta
+    cutoff = (datetime.now(timezone.utc).date() - timedelta(days=days)).isoformat()
+    seen: dict = {}
+    for f in sorted(DATA_DIR.glob("pending_updates_*.json")):
+        ds = f.stem.replace("pending_updates_", "")
+        if ds < cutoff or ds > date_str:
+            continue
+        try:
+            data = json.loads(f.read_text())
+        except Exception:
+            continue
+        for key, kind in (("new_deadlines", "deadline"), ("updated_deadlines", "update"),
+                          ("regulatory_updates", "regulatory")):
+            for it in data.get(key, []):
+                if not isinstance(it, dict):
+                    continue
+                sig = car._sig(it)
+                if (it.get("id") in rejected["ids"] or sig in rejected["signatures"]
+                        or it.get("id") in live_ids or sig in live_sigs):
+                    continue
+                seen.setdefault(("proposal", sig), {
+                    "kind": kind,
+                    "title": it.get("title") or it.get("id") or "",
+                    "date": it.get("date", ""),
+                    "first_seen": ds,
+                    "urgent": bool(it.get("urgent")),
+                })
+        for it in data.get("needs_human_review", []):
+            if not isinstance(it, dict):
+                it = {"description": str(it)}
+            rsig = car._review_sig(it)
+            if it.get("id") in rejected["ids"] or rsig in rejected["signatures"]:
+                continue
+            seen.setdefault(("flag", rsig), {
+                "kind": "flagged",
+                "title": it.get("title") or it.get("id") or (it.get("description") or "")[:80],
+                "date": "",
+                "first_seen": ds,
+                "urgent": bool(it.get("urgent")),
+            })
+    return sorted(seen.values(), key=lambda x: (not x["urgent"], x["first_seen"]))
+
+
 def read_log_today(path: Path, date_str: str) -> list[str]:
     """Return lines from `path` whose timestamp prefix matches `date_str`."""
     if not path.exists():
@@ -154,10 +222,19 @@ def read_approval(date_str: str) -> dict | None:
     return out
 
 
-def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None) -> str:
+def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None) -> str:
     """Build the HTML email body. Plain-text fallback is built separately."""
     parts = []
     parts.append(f"<h2 style='margin:0 0 12px 0;font:600 18px/1.3 -apple-system,system-ui,sans-serif'>PKI Compliance daily report — {date_str}</h2>")
+
+    urgent_items = [o for o in (outstanding or []) if o.get("urgent")]
+    if urgent_items:
+        parts.append("<p style='font:600 14px/1.4 -apple-system,system-ui,sans-serif;color:#b91c1c'>🚨 "
+                     f"{len(urgent_items)} urgent item(s) awaiting review:</p>")
+        parts.append("<ul style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding-left:20px;color:#b91c1c'>")
+        for o in urgent_items:
+            parts.append(f"<li><strong>{escape(o['title'])}</strong>{' — ' + escape(o['date']) if o['date'] else ''} (first seen {escape(o['first_seen'])})</li>")
+        parts.append("</ul>")
 
     # Top-line counts
     proposed_count = 0
@@ -179,6 +256,8 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
         parts.append(f"<strong>{len(approval.get('applied', []))}</strong> applied automatically, ")
         parts.append(f"<strong>{len(approval.get('queue', []))}</strong> queued for your review, ")
     parts.append(f"<strong>{needs_review_count}</strong> flagged for review, ")
+    if outstanding is not None:
+        parts.append(f"<strong>{len(outstanding)}</strong> outstanding across last 14 days, ")
     if not doc_check.get("ran"):
         parts.append("<strong>doc-check did not run</strong>.")
     elif doc_changes is None:
@@ -279,7 +358,20 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
             for d in changed_or_new:
                 parts.append(f"<li><code>{escape(d['id'])}</code>: {escape(d['status'])}</li>")
             parts.append("</ul>")
-            parts.append("<p style='font:12px/1.4 -apple-system,system-ui,sans-serif;color:#666;margin-top:4px'>Note: 3 URLs (microsoft_root_program, nist_800_131a, nist_800_57) are known-noisy due to dynamic page content; their flips are usually not meaningful.</p>")
+            parts.append("<p style='font:12px/1.4 -apple-system,system-ui,sans-serif;color:#666;margin-top:4px'>Note: hashes are sanitized against dynamic page noise (fixed 2026-07-09); a flagged change is usually a real document update worth a look.</p>")
+
+    # Rolling backlog: everything still awaiting a decision, however old the
+    # email that first mentioned it. Makes missed email days cost nothing.
+    if outstanding:
+        parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>Outstanding review items (last 14 days)</h3>")
+        parts.append("<ul style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding-left:20px'>")
+        for o in outstanding:
+            urgent_tag = "🚨 " if o.get("urgent") else ""
+            date_part = f" <em>({escape(o['date'])})</em>" if o.get("date") else ""
+            parts.append(f"<li>{urgent_tag}<strong>[{escape(o['kind'])}]</strong> {escape(o['title'][:200])}{date_part} — first seen {escape(o['first_seen'])}</li>")
+        parts.append("</ul>")
+    elif outstanding is not None:
+        parts.append("<p style='font:13px/1.4 -apple-system,system-ui,sans-serif;color:#15803d'>✓ No outstanding review items from the last 14 days.</p>")
 
     # Footer
     dashboard_token = os.environ.get("DASHBOARD_TOKEN", "")
@@ -294,7 +386,7 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
     return "<div style='max-width:640px'>" + "".join(parts) + "</div>"
 
 
-def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None) -> str:
+def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None) -> str:
     lines = [f"PKI Compliance daily report — {date_str}", "=" * 60, ""]
 
     proposed = 0
@@ -314,6 +406,11 @@ def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refre
             lines.append(f"Auto-apply BLOCKED: {approval['blocked']}")
     lines.append(f"Flagged for review: {len(pending.get('needs_human_review', [])) if pending else 0}")
     lines.append(f"Doc URL hash changes: {doc_check.get('changes_detected', 'n/a')}")
+    if outstanding is not None:
+        lines.append(f"Outstanding review items (last 14 days): {len(outstanding)}")
+        for o in outstanding:
+            tag = "URGENT " if o.get("urgent") else ""
+            lines.append(f"  - {tag}[{o['kind']}] {o['title'][:120]} (first seen {o['first_seen']})")
     lines.append("")
     lines.append(f"10:00 UTC research cron: {'ran' if auto_refresh.get('ran') else 'DID NOT RUN'}")
     lines.append(f"10:30 UTC doc-check cron: {'ran' if doc_check.get('ran') else 'DID NOT RUN'}")
@@ -351,10 +448,21 @@ def main() -> int:
             + len(pending.get("document_version_updates", []))
             + len(pending.get("regulatory_updates", []))
         )
-    subject = f"[PKI Compliance] {date_str} — {proposed} proposed change(s)"
+    try:
+        outstanding = outstanding_review_items(date_str)
+    except Exception as e:
+        print(f"WARNING: outstanding-items aggregation failed: {e}", file=sys.stderr)
+        outstanding = None
 
-    html = render_html(date_str, pending, doc_check, auto_refresh, approval)
-    text = render_text(date_str, pending, doc_check, auto_refresh, approval)
+    urgent_count = sum(1 for o in (outstanding or []) if o.get("urgent"))
+    subject = f"[PKI Compliance] {date_str} — {proposed} proposed change(s)"
+    if outstanding is not None:
+        subject += f", {len(outstanding)} outstanding"
+    if urgent_count:
+        subject = f"🚨 URGENT ({urgent_count}) — " + subject
+
+    html = render_html(date_str, pending, doc_check, auto_refresh, approval, outstanding)
+    text = render_text(date_str, pending, doc_check, auto_refresh, approval, outstanding)
 
     try:
         r = httpx.post(

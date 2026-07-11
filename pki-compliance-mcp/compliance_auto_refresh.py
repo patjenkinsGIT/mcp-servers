@@ -209,8 +209,12 @@ Each new_deadline should match this format:
   "isMajor": true/false,
   "impact": "Brief impact statement",
   "is_estimated": true/false (true unless a primary source explicitly states the exact day),
-  "feed_confirmed": true/false (true ONLY when the research findings for this item cite a tracked source document or feed that was flagged as changed; when in doubt, false)
+  "feed_confirmed": true/false (true ONLY when the research findings for this item cite a tracked source document or feed that was flagged as changed; when in doubt, false),
+  "urgent": true/false (true ONLY for items demanding action on a weeks-not-months timescale: an announced mass revocation event, distrust/removal of a currently trusted root or CA, or a new compliance obligation taking effect within ~60 days; default false)
 }
+
+needs_human_review items may also carry "urgent": true under the same criteria \
+(e.g. an unverified report of an imminent mass revocation still deserves the flag).
 
 Each document_version_update:
 {
