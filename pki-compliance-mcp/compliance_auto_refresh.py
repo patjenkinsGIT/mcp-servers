@@ -384,19 +384,24 @@ def detect_document_changes() -> tuple[int, list[str]]:
     """Cheap change detection via the container. No Anthropic API calls.
 
     Returns (changes_detected, changed_doc_ids). changes_detected == -1 means
-    detection itself failed (container down, etc.).
+    detection itself failed (container down, etc.). Slow upstream fetches can
+    push a single sweep past the subprocess timeout (seen 2026-07-11), so one
+    transient failure gets one retry before we give up for the day.
     """
-    try:
-        out = subprocess.run(
-            ["docker", "exec", PKI_CONTAINER, "python3", "-c", _DETECT_SNIPPET],
-            capture_output=True, text=True, timeout=300, check=True,
-        ).stdout.strip()
-        data = json.loads(out)
-        changed = [d["document_id"] for d in data.get("documents", []) if d.get("changed")]
-        return int(data.get("changes_detected", 0)), changed
-    except Exception as e:
-        log(f"WARNING: document change detection failed: {e}")
-        return -1, []
+    for attempt in (1, 2):
+        try:
+            out = subprocess.run(
+                ["docker", "exec", PKI_CONTAINER, "python3", "-c", _DETECT_SNIPPET],
+                capture_output=True, text=True, timeout=300, check=True,
+            ).stdout.strip()
+            data = json.loads(out)
+            changed = [d["document_id"] for d in data.get("documents", []) if d.get("changed")]
+            return int(data.get("changes_detected", 0)), changed
+        except Exception as e:
+            log(f"WARNING: document change detection failed (attempt {attempt}/2): {e}")
+            if attempt == 1:
+                time.sleep(60)
+    return -1, []
 
 
 def days_since_last_research() -> float:

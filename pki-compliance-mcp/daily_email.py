@@ -120,11 +120,18 @@ def auto_refresh_summary(log_lines: list[str]) -> dict:
     errors = [ln for ln in section if "ERROR" in ln]
     rate_limited = sum(1 for ln in section if "Rate limited" in ln)
     review_file_written = any("Review file written" in ln for ln in section)
+    # A gate skip is a deliberate no-op (no review file expected), not a failure.
+    skip_line = next((ln for ln in section if "Research gate: SKIP" in ln), None)
+    skip_reason = ""
+    if skip_line and "SKIP — " in skip_line:
+        skip_reason = skip_line.split("SKIP — ", 1)[1].strip()
     return {
         "ran": True,
         "errors": errors,
         "rate_limited_count": rate_limited,
         "review_file_written": review_file_written,
+        "skipped": skip_line is not None,
+        "skip_reason": skip_reason,
     }
 
 
@@ -184,8 +191,12 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
     parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>Cron status</h3>")
     parts.append("<ul style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding-left:20px'>")
     if auto_refresh.get("ran"):
-        ar_ok = auto_refresh.get("review_file_written") and not auto_refresh.get("errors")
-        parts.append(f"<li>10:00 UTC research cron: {'✓ ran clean, review file written' if ar_ok else '⚠ ran with errors'}")
+        if auto_refresh.get("skipped") and not auto_refresh.get("errors"):
+            reason = auto_refresh.get("skip_reason") or "no tracked changes"
+            parts.append(f"<li>10:00 UTC research cron: ✓ ran — research skipped ({escape(reason)}); no review file expected")
+        else:
+            ar_ok = auto_refresh.get("review_file_written") and not auto_refresh.get("errors")
+            parts.append(f"<li>10:00 UTC research cron: {'✓ ran clean, review file written' if ar_ok else '⚠ ran with errors'}")
         if auto_refresh.get("errors"):
             parts.append(f" — {len(auto_refresh['errors'])} error line(s)")
         if auto_refresh.get("rate_limited_count"):
@@ -218,7 +229,7 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
         parts.append("</ul>")
     elif pending and "_parse_error" in pending:
         parts.append(f"<p style='color:#b91c1c;font:13px/1.4 -apple-system,system-ui,sans-serif'>⚠ Could not parse pending_updates_{date_str}.json: {escape(pending['_parse_error'])}</p>")
-    elif pending is None and auto_refresh.get("ran"):
+    elif pending is None and auto_refresh.get("ran") and not auto_refresh.get("skipped"):
         parts.append(f"<p style='color:#b91c1c;font:13px/1.4 -apple-system,system-ui,sans-serif'>⚠ Research cron ran but pending_updates_{date_str}.json is missing.</p>")
 
     # Auto-approve outcome (10:15 cron)
