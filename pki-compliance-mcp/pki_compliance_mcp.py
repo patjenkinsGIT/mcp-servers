@@ -172,6 +172,18 @@ MANUAL_CHECK_REQUIRED = [
 # "~ Est." badge), source_url (link to the authoritative source).
 DEADLINES = [
     {
+        "id": "sc0101v2-authorization-domain-name-mandatory",
+        "date": "2026-11-15",
+        "title": "SC0101v2 Authorization Domain Name Rules Become Mandatory",
+        "description": "CA/Browser Forum Ballot SC0101v2 ('Clarify Authorization Domain Names') passed on July 1, 2026, simplifying the definition of Authorization Domain Name and clarifying CNAME-following/label-pruning validation rules. CAs may continue complying with the prior version of BR Section 3.2.2.4 until November 15, 2026, after which the new rules become mandatory.",
+        "source": "cab-forum",
+        "source_url": "https://cabforum.org/2026/07/01/ballot-sc0101v2-clarify-authorization-domain-names/",
+        "category": "validation",
+        "isMajor": True,
+        "impact": "CAs must update domain validation processes for CNAME-following and label-pruning to comply with the clarified Authorization Domain Name definition by this date.",
+        "is_estimated": False,
+    },
+    {
         "id": "chrome-digicert-legacy-roots-distrust",
         "date": "2026-07-01",
         "title": "Chrome distrust: DigiCert Trusted Root G4 / Assured ID G2/G3 (new issuance)",
@@ -2128,7 +2140,7 @@ RELATED_RFCS = [
 
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
-    "lastUpdated": "2026-07-10",
+    "lastUpdated": "2026-07-12",
     "dataVersion": "2.4.4",
     "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
@@ -2151,7 +2163,7 @@ DATA_FRESHNESS = {
     "nextReviewDue": "2026-08-09",
     "reviewIntervalDays": 30,
     "fieldVerifications": {
-        "deadlines": {"verified": "2026-07-10", "source": "2026-07-10 review: Chrome dedicated-TLS enforcement start (2026-06-15) verified against policy v1.8 §1.3.2; OMB M-26-15 plan deadline (2026-10-22), federal TLS 1.3 (2030-01-02), and 2035 full-migration target verified against memo PDF; Apple Root Program doc-check moved to authoritative GitHub repo. SMC017v2 held pending IPR completion (~2026-07-30). Prior review 2026-07-09 (SC098v2, Chrome root cap, NSPM-12)"},
+        "deadlines": {"verified": "2026-07-12", "source": "2026-07-10 review: Chrome dedicated-TLS enforcement start (2026-06-15) verified against policy v1.8 §1.3.2; OMB M-26-15 plan deadline (2026-10-22), federal TLS 1.3 (2030-01-02), and 2035 full-migration target verified against memo PDF; Apple Root Program doc-check moved to authoritative GitHub repo. SMC017v2 held pending IPR completion (~2026-07-30). Prior review 2026-07-09 (SC098v2, Chrome root cap, NSPM-12)"},
         "rootStores": {"verified": "2026-05-14", "source": "Individual root program policies"},
         "algorithmRequirements": {"verified": "2026-05-14", "source": "CA/B Forum TLS BR 2.2.6, NIST FIPS 203/204/205, NIST SP 800-131A Rev 3"},
         "caChains": {"verified": "2026-05-14", "source": "Official CA documentation"},
