@@ -521,6 +521,39 @@ def _review_sig(item) -> str:
     return "text:" + " ".join(_norm(text).split()[:12])
 
 
+def held_review_anchors(days: int = 14) -> set:
+    """Anchor tokens from non-rejected review flags in recent pending files.
+
+    A topic a human is still deciding on (e.g. a ballot held for IPR review)
+    must not be auto-applied even if a later research run re-proposes it as a
+    confirmed deadline — the hold outranks the model's confidence.
+    (2026-07-12: auto-approve shipped SC0101v2 three weeks before its IPR
+    review ended because it had no view of held topics.)"""
+    rejected = load_rejected()
+    anchors: set = set()
+    cutoff = datetime.now(timezone.utc).date() - timedelta(days=days)
+    for f in sorted(DATA_DIR.glob("pending_updates_*.json")):
+        ds = f.stem.replace("pending_updates_", "")
+        try:
+            if datetime.strptime(ds, "%Y-%m-%d").date() < cutoff:
+                continue
+        except ValueError:
+            continue
+        try:
+            data = json.loads(f.read_text())
+        except Exception:
+            continue
+        for it in data.get("needs_human_review", []):
+            if not isinstance(it, dict):
+                it = {"description": str(it)}
+            sig = _review_sig(it)
+            if it.get("id") in rejected["ids"] or sig in rejected["signatures"]:
+                continue
+            if sig.startswith("anchors:"):
+                anchors.update(sig[len("anchors:"):].split("+"))
+    return anchors
+
+
 def load_prior_review_sigs(days: int = 14, exclude_date: str | None = None) -> dict:
     """Map review-flag signature -> first-seen date from recent pending files,
     so today's run can drop flags that are just yesterday's items re-worded."""

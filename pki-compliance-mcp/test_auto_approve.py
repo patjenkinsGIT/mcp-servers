@@ -91,6 +91,31 @@ check("updates always queue", not a and len(r) == 1)
 a, _, r, _ = aa.classify({"document_version_updates": [{"id": "tls-br", "new_version": "2.2.6"}]}, CURRENT, 5)
 check("already-current doc version skipped", not a and not r)
 
+print("== classify: open review hold blocks auto-apply (2026-07-12 regression) ==")
+from datetime import datetime, timezone
+TODAY = datetime.now(timezone.utc).date().isoformat()
+(d / f"pending_updates_{TODAY}.json").write_text(json.dumps({
+    "needs_human_review": [
+        {"id": "cabf-sc0101v2-adn-transition",
+         "description": "Ballot SC0101v2 passed but IPR review has not completed"},
+        {"id": "rejected-hold", "description": "Ballot CSC-32 something",
+         },
+    ],
+}))
+held_item = entry(id="sc0101v2-adn-mandatory", title="SC0101v2 ADN Rules Become Mandatory",
+                  description="Ballot SC0101v2 transition ends.", date="2026-11-15",
+                  source_url="https://cabforum.org/2026/07/01/ballot-sc0101v2-clarify-authorization-domain-names/")
+a, _, r, s = aa.classify({"new_deadlines": [held_item]}, CURRENT, 5)
+check("held-topic proposal queues instead of auto-applying",
+      not a and len(r) == 1 and "review hold" in r[0][2])
+# The hold lifts when the flag is rejected (handled) — same proposal then applies.
+car.REJECTED_FILE.write_text(json.dumps(
+    {"ids": ["rejected-1", "cabf-sc0101v2-adn-transition"], "signatures": []}))
+a, _, r, s = aa.classify({"new_deadlines": [held_item]}, CURRENT, 5)
+check("rejected flag no longer holds the topic", [x["id"] for x in a] == ["sc0101v2-adn-mandatory"])
+car.REJECTED_FILE.write_text(json.dumps({"ids": ["rejected-1"], "signatures": []}))
+(d / f"pending_updates_{TODAY}.json").unlink()
+
 print("== patch_source round-trip ==")
 mini = '''"""mini"""
 DEADLINES = [

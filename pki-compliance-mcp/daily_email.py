@@ -24,6 +24,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
@@ -48,6 +49,25 @@ def read_pending_updates(date_str: str) -> dict | None:
         return json.loads(p.read_text())
     except Exception as e:
         return {"_parse_error": str(e)}
+
+
+def wait_for_morning_chain(date_str: str, max_wait_s: int = 1500) -> None:
+    """Block until the 10:00 research→auto-approve chain has finished.
+
+    Research can run past 10:35 on slow days (2026-07-12: 35 minutes, and the
+    email reported on a half-done run). auto_approve.py always writes a log
+    line when the chain ends — even on gate-skip days — so poll for today's
+    entry. Gives up after max_wait_s and lets the email report what it sees.
+    """
+    log_p = DATA_DIR / "auto_approve.log"
+    deadline = time.time() + max_wait_s
+    while time.time() < deadline:
+        try:
+            if any(date_str in ln for ln in log_p.read_text(errors="replace").splitlines()):
+                return
+        except FileNotFoundError:
+            pass
+        time.sleep(30)
 
 
 def outstanding_review_items(date_str: str, days: int = 14) -> list[dict]:
@@ -212,6 +232,8 @@ def auto_refresh_summary(log_lines: list[str]) -> dict:
         "review_file_written": review_file_written,
         "skipped": skip_line is not None,
         "skip_reason": skip_reason,
+        # started but neither wrote a review file nor skipped -> mid-run
+        "in_progress": not review_file_written and skip_line is None and not errors,
     }
 
 
@@ -285,6 +307,8 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
         if auto_refresh.get("skipped") and not auto_refresh.get("errors"):
             reason = auto_refresh.get("skip_reason") or "no tracked changes"
             parts.append(f"<li>10:00 UTC research cron: ✓ ran — research skipped ({escape(reason)}); no review file expected")
+        elif auto_refresh.get("in_progress"):
+            parts.append("<li>10:00 UTC research cron: ⏳ still running at send time — today's counts are incomplete; check the dashboard later")
         else:
             ar_ok = auto_refresh.get("review_file_written") and not auto_refresh.get("errors")
             parts.append(f"<li>10:00 UTC research cron: {'✓ ran clean, review file written' if ar_ok else '⚠ ran with errors'}")
@@ -442,6 +466,7 @@ def main() -> int:
     from_addr = os.environ.get("PKI_EMAIL_FROM", DEFAULT_FROM)
     date_str = today_iso()
 
+    wait_for_morning_chain(date_str)
     pending = read_pending_updates(date_str)
     cron_log = read_log_today(DATA_DIR / "cron.log", date_str)
     # Doc log must NOT be date-filtered: its data lines lack timestamps.

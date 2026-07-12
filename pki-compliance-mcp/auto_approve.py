@@ -114,6 +114,7 @@ def classify(changes: dict, current_data: dict | None, max_auto: int):
         cur_docs = {d.get("id"): d.get("version")
                     for d in current_data.get("cabfDocuments", [])}
     rejected = car.load_rejected()
+    held_anchors = car.held_review_anchors()
 
     for item in changes.get("new_deadlines", []):
         iid = item.get("id")
@@ -136,6 +137,15 @@ def classify(changes: dict, current_data: dict | None, max_auto: int):
         if item.get("feed_confirmed") is not True:
             review.append(("deadline", item, "not feed-confirmed"))
             continue
+        # A topic with an open human-review hold (e.g. ballot in IPR review)
+        # never auto-applies, however confident today's research is.
+        item_sig = car._review_sig(item)
+        if item_sig.startswith("anchors:"):
+            overlap = set(item_sig[len("anchors:"):].split("+")) & held_anchors
+            if overlap:
+                review.append(("deadline", item,
+                               f"topic has an open review hold ({'+'.join(sorted(overlap))})"))
+                continue
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", item.get("date", "")):
             review.append(("deadline", item, f"bad date format: {item.get('date')}"))
             continue
