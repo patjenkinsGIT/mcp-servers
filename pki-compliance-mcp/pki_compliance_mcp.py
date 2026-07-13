@@ -1010,6 +1010,35 @@ DEADLINES = [
         "is_estimated": True,
     },
     {
+        "id": "cabf-csc32-reserved-policy-oid",
+        "date": "2026-09-15",
+        "title": "CA/B Forum CSC-32 — reserved policy OID mandatory in code signing certificates",
+        "description": "Code Signing BRs v3.11.0 §7.1.6.4 (ballot CSC-32, passed 2026-05-11, IPR completed 2026-06-10 with no exclusions): effective September 15, 2026, every newly issued publicly trusted code signing subscriber certificate MUST contain exactly one of the reserved policy OIDs in certificatePolicies — 2.23.140.1.4.1 (non-EV code signing), 2.23.140.1.3 (EV code signing), 2.23.140.1.4.2 (timestamping). CA-defined policy OIDs may additionally be present.",
+        "source": "cab-forum",
+        "source_url": "https://cabforum.org/2026/06/16/ballot-csc-32-make-a-reserved-policy-oid-mandatory/",
+        "category": "certificates",
+        "isMajor": False,
+        "impact": "CAs must include the correct reserved policy OID at issuance; tooling that inspects certificatePolicies gains a reliable discriminator for code-signing certificate types.",
+        "framework_id": "cabforum",
+        "framework_name": "CA/Browser Forum",
+        "jurisdiction": "global",
+    },
+    {
+        "id": "digicert-g1-root-distrust",
+        "date": "2026-04-15",
+        "title": "DigiCert G1 roots distrusted by Chrome and Mozilla",
+        "description": "On April 15, 2026 Chrome and Mozilla removed DigiCert's first-generation roots — DigiCert Assured ID Root CA, DigiCert Global Root CA, DigiCert High Assurance EV Root CA — from their trust stores. Full removal: ALL TLS certificates chaining solely to G1 roots lost trust regardless of issuance date; reissuance under Global Root G2 (RSA) or G3 (ECC) required. Distinct from the Chrome-only Trusted Root G4 / Assured ID G2/G3 action (SCTNotAfter-style, certs issued on/after 2026-07-01); related to DigiCert's 2026-05-15 self-revocation of non-TLS G2/G3 ICAs and G5 cross-signed roots — all part of the dedicated-TLS-hierarchy alignment.",
+        "source": "chrome",
+        "source_url": "https://knowledge.digicert.com/alerts/digicert-root-strategy-aligning-with-industry-standards",
+        "category": "root-store",
+        "isMajor": True,
+        "impact": "Any service still presenting a chain to a G1 root shows trust errors in Chrome and Firefox since April 15, 2026 — reissue under G2/G3.",
+        "consequences": {
+            "enforcement": "Chrome and Mozilla removed the three G1 roots outright: every TLS certificate chaining solely to them is untrusted regardless of issuance date — unlike SCTNotAfter phase-outs, existing certificates were not grandfathered.",
+            "scenario": "The stragglers' failure mode: an internal service or appliance still serving the old G1 chain throws NET::ERR_CERT_AUTHORITY_INVALID for anyone on a current browser. If you find one, the cert itself is usually fine — re-download the G2/G3 chain from DigiCert and replace the bundle.",
+        },
+    },
+    {
         "id": "luxembourg-nis2-in-force",
         "date": "2026-05-10",
         "title": "Luxembourg NIS2 transposition — entry into force",
@@ -1086,6 +1115,16 @@ REGULATORY_FRAMEWORKS = [
                 "category": "reporting",
                 "impact": "high",
                 "description": "Second annual Register of Information submission. From 2026 onwards, competent authorities submit RoIs to the ESAs by 31 March each year (per EBA DORA reporting FAQ). Regulators expect more mature submissions with detailed ICT third-party documentation."
+            },
+            {
+                "id": "dora-ctpp-eu-subsidiary-window",
+                "title": "Non-EU CTPPs: EU subsidiary window closes (Art. 31(12))",
+                "date": "2026-11-18",
+                "source_url": "https://www.eba.europa.eu/publications-and-media/press-releases/european-supervisory-authorities-designate-critical-ict-third-party-providers-under-digital",
+                "category": "requirements",
+                "impact": "medium",
+                "description": "DORA Art. 31(12): financial entities may only use a third-country ICT provider designated as critical if it has established an EU subsidiary within 12 months of designation. The ESAs designated the first 19 CTPPs on 18 November 2025, so the window closes ~18 November 2026 (date derived from the 12-month statutory period). Most designated groups already operate EU subsidiaries; the practical exposure is for financial entities using third-country-established designees (e.g. Bloomberg L.P., FIS, IBM Corp., Kyndryl, NTT DATA, TCS, and UK-established Colt and LSEG entities) if any fail to maintain one.",
+                "is_estimated": True
             }
         ]
     },
@@ -2128,8 +2167,8 @@ RELATED_RFCS = [
 
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
-    "lastUpdated": "2026-07-10",
-    "dataVersion": "2.4.4",
+    "lastUpdated": "2026-07-13",
+    "dataVersion": "2.4.5",
     "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
@@ -2147,11 +2186,11 @@ COMPLIANCE_METADATA = {
 }
 
 DATA_FRESHNESS = {
-    "lastFullReview": "2026-07-10",
-    "nextReviewDue": "2026-08-09",
+    "lastFullReview": "2026-07-13",
+    "nextReviewDue": "2026-08-12",
     "reviewIntervalDays": 30,
     "fieldVerifications": {
-        "deadlines": {"verified": "2026-07-10", "source": "2026-07-10 review: Chrome dedicated-TLS enforcement start (2026-06-15) verified against policy v1.8 §1.3.2; OMB M-26-15 plan deadline (2026-10-22), federal TLS 1.3 (2030-01-02), and 2035 full-migration target verified against memo PDF; Apple Root Program doc-check moved to authoritative GitHub repo. SMC017v2 held pending IPR completion (~2026-07-30). Prior review 2026-07-09 (SC098v2, Chrome root cap, NSPM-12)"},
+        "deadlines": {"verified": "2026-07-13", "source": "2026-07-13 review: CSC-32 reserved policy OID (2026-09-15) verified against CS BR v3.11.0 §7.1.6.4 and ballot post; DigiCert G1 Chrome+Mozilla full distrust (2026-04-15) verified against DigiCert alerts; DORA Art. 31(12) CTPP EU-subsidiary window (~2026-11-18, estimated) verified against EBA/ESMA announcements and regulation text. Ten stale review flags cleared. SC0101v2 (IPR ~Aug 6) and SMC017v2 (IPR ~Jul 30) remain held. Prior review 2026-07-10"},
         "rootStores": {"verified": "2026-05-14", "source": "Individual root program policies"},
         "algorithmRequirements": {"verified": "2026-05-14", "source": "CA/B Forum TLS BR 2.2.6, NIST FIPS 203/204/205, NIST SP 800-131A Rev 3"},
         "caChains": {"verified": "2026-05-14", "source": "Official CA documentation"},
