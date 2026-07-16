@@ -201,6 +201,20 @@ backgrounds, gradients, small text, more than 2 colors + white." with the \
 """
 
 
+def _extract_json(text: str) -> dict:
+    """Parse the model's JSON reply.
+
+    strict=False tolerates literal newlines/control characters inside
+    strings — the most common defect in long model-emitted JSON (the blog
+    body alone is 600-900 words). Raises ValueError/JSONDecodeError on
+    anything worse; generate() treats that as retryable.
+    """
+    m = re.search(r"\{[\s\S]*\}", text)
+    if not m:
+        raise ValueError("no JSON object in model response")
+    return json.loads(m.group(), strict=False)
+
+
 def generate(entry: dict, summary: str, max_retries: int = 3) -> dict:
     """One API call -> the full four-piece package as a dict."""
     if not car.ANTHROPIC_API_KEY:
@@ -241,11 +255,14 @@ def generate(entry: dict, summary: str, max_retries: int = 3) -> dict:
             block["text"] for block in response.json()["content"]
             if block["type"] == "text"
         )
-        json_match = re.search(r"\{[\s\S]*\}", text)
-        if not json_match:
-            raise RuntimeError("no JSON object in model response")
-        return json.loads(json_match.group())
-    raise RuntimeError(f"rate limited or timed out after {max_retries} retries")
+        try:
+            return _extract_json(text)
+        except (ValueError, json.JSONDecodeError) as e:
+            log(f"  unparseable JSON from model ({e}), retrying "
+                f"(attempt {attempt+1}/{max_retries})")
+            continue
+    raise RuntimeError(f"no valid response after {max_retries} attempts "
+                       "(rate limit, timeout, or unparseable JSON)")
 
 
 # ---------------------------------------------------------------------------

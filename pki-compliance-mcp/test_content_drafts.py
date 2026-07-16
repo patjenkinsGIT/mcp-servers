@@ -69,6 +69,19 @@ check("already-drafted signature excluded", len(got) == 1
 cd.STATE_FILE.unlink()
 car.REJECTED_FILE.write_text(json.dumps({"ids": [], "signatures": []}))
 
+print("== _extract_json ==")
+check("plain JSON", cd._extract_json('{"a": 1}') == {"a": 1})
+check("JSON with prose around it",
+      cd._extract_json('Here you go:\n{"a": 1}\nDone.') == {"a": 1})
+check("literal newline inside string tolerated",
+      cd._extract_json('{"body": "line one\nline two"}')["body"]
+      == "line one\nline two")
+try:
+    cd._extract_json("no json here")
+    check("raises on no JSON", False)
+except ValueError:
+    check("raises on no JSON", True)
+
 print("== slugify ==")
 check("basic", cd.slugify("Mass Revocation: DigiCert!") == "mass-revocation-digicert")
 check("empty fallback", cd.slugify("!!!") == "urgent-item")
