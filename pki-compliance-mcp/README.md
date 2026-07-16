@@ -132,6 +132,10 @@ curl -s https://compliance-api.fixmycert.com/api/compliance-data | python3 -c \
 
 Note: `/api/compliance-data` is served with a 1-hour cache header — browsers may show stale data for up to an hour after a deploy (hard refresh to bypass).
 
+## Stripe sale notifications
+
+`POST /webhooks/stripe` on the API receives Stripe webhooks (nginx proxies the whole domain to :5000). Flow: verify `Stripe-Signature` (HMAC, 5-min replay window) → on `checkout.session.completed`, push to Pushover with the cash-register sound and append the sale to `/root/.pki-compliance-mcp/stripe_sales.jsonl`. Config via droplet `.env` (loaded through the systemd unit's `EnvironmentFile`): `STRIPE_WEBHOOK_SECRET`, `PUSHOVER_TOKEN`, `PUSHOVER_USER`. Returns 503 until the secret is set; duplicate Stripe deliveries at worst repeat the push. Tests: `test_stripe_webhook.py`.
+
 ## Front-end (separate codebase)
 
 The Compliance Hub UI lives in the **FixMyCert** Replit app — not in this repo. It fetches `/api/compliance-data` and renders:

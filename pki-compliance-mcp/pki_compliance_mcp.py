@@ -4192,6 +4192,71 @@ async def list_sources(params: GetStatusInput) -> str:
 # Main Entry Point
 # ============================================================================
 
+# ---------------------------------------------------------------------------
+# Stripe sale notifications (webhook -> Pushover "cha-ching")
+# ---------------------------------------------------------------------------
+
+STRIPE_SALES_LOG = Path("/root/.pki-compliance-mcp/stripe_sales.jsonl")
+
+
+def verify_stripe_signature(payload: bytes, sig_header: str, secret: str,
+                            tolerance: int = 300,
+                            now: float | None = None) -> bool:
+    """Verify a Stripe-Signature header (t=...,v1=...) against the payload.
+
+    Constant-time compare over every v1 candidate; rejects timestamps
+    outside `tolerance` seconds to block replay.
+    """
+    import hmac
+    import time as _time
+    ts = None
+    candidates = []
+    for part in (sig_header or "").split(","):
+        k, _, v = part.strip().partition("=")
+        if k == "t" and v.isdigit():
+            ts = int(v)
+        elif k == "v1" and v:
+            candidates.append(v)
+    if ts is None or not candidates:
+        return False
+    if abs((now if now is not None else _time.time()) - ts) > tolerance:
+        return False
+    expected = hmac.new(secret.encode(), f"{ts}.".encode() + payload,
+                        hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(expected, c) for c in candidates)
+
+
+def summarize_stripe_event(event: dict) -> dict | None:
+    """Return {"title", "message"} for a push-worthy event, else None."""
+    if event.get("type") != "checkout.session.completed":
+        return None
+    obj = (event.get("data") or {}).get("object") or {}
+    amount = obj.get("amount_total")
+    if isinstance(amount, (int, float)):
+        amount_str = f"{amount / 100:,.2f} {(obj.get('currency') or 'usd').upper()}"
+    else:
+        amount_str = "unknown amount"
+    email = (obj.get("customer_details") or {}).get("email") or "unknown buyer"
+    return {"title": "💰 FixMyCert sale", "message": f"{amount_str} — {email}"}
+
+
+def send_pushover(title: str, message: str) -> bool:
+    """Best-effort Pushover push with the cash-register sound."""
+    token = _os.environ.get("PUSHOVER_TOKEN", "")
+    user = _os.environ.get("PUSHOVER_USER", "")
+    if not (token and user):
+        return False
+    try:
+        r = httpx.post("https://api.pushover.net/1/messages.json", data={
+            "token": token, "user": user, "title": title,
+            "message": message, "sound": "cashregister",
+        }, timeout=15)
+        r.raise_for_status()
+        return True
+    except Exception:
+        return False
+
+
 # For Replit: Simple HTTP wrapper if MCP HTTP transport has issues
 def create_http_app():
     """Create a simple HTTP API wrapper for environments where MCP HTTP transport doesn't work."""
@@ -4203,6 +4268,56 @@ def create_http_app():
         return _html_mod.escape(str(s))
 
     class PKIComplianceHandler(BaseHTTPRequestHandler):
+        def _reply(self, code: int, body: bytes, ctype: str = "application/json"):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            parsed = urllib.parse.urlparse(self.path)
+            if parsed.path != "/webhooks/stripe":
+                self._reply(404, b'{"error": "not found"}')
+                return
+            secret = _os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+            if not secret:
+                self._reply(503, b'{"error": "webhook not configured"}')
+                return
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = 0
+            if not 0 < length <= 1_000_000:
+                self._reply(400, b'{"error": "bad content length"}')
+                return
+            payload = self.rfile.read(length)
+            if not verify_stripe_signature(
+                    payload, self.headers.get("Stripe-Signature", ""), secret):
+                self._reply(400, b'{"error": "bad signature"}')
+                return
+            try:
+                event = json.loads(payload)
+            except Exception:
+                self._reply(400, b'{"error": "bad json"}')
+                return
+            # Always ack verified events with 200 so Stripe doesn't retry;
+            # a duplicate delivery at worst repeats a cha-ching.
+            sale = summarize_stripe_event(event)
+            if sale:
+                pushed = send_pushover(sale["title"], sale["message"])
+                try:
+                    STRIPE_SALES_LOG.parent.mkdir(parents=True, exist_ok=True)
+                    with open(STRIPE_SALES_LOG, "a") as f:
+                        f.write(json.dumps({
+                            "at": datetime.now(timezone.utc).isoformat(),
+                            "event_id": event.get("id"),
+                            "summary": sale["message"],
+                            "pushed": pushed,
+                        }) + "\n")
+                except Exception:
+                    pass
+            self._reply(200, b'{"received": true}')
+
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
             path = parsed.path
