@@ -702,16 +702,6 @@ DEADLINES = [
         "impact": "Transparency requirement for certificate automation readiness."
     },
     {
-        "id": "apple-ari-disclosure",
-        "date": "2025-04-01",
-        "title": "Apple ARI Disclosure Requirement",
-        "description": "CAs must disclose ACME Renewal Information (ARI) implementation status.",
-        "source": "apple",
-        "category": "certificates",
-        "isMajor": False,
-        "impact": "Required for Apple root store compliance."
-    },
-    {
         "id": "chrome-entrust-distrust",
         "date": "2024-11-11",
         "title": "Chrome Entrust Distrust",
