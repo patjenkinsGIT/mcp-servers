@@ -63,8 +63,16 @@ Each `DEADLINES` entry:
 - **Rollback**: `git revert` the auto-approve commit (ops itemized in `approval_log_<date>.json`), or restore the newest backup and restart the service.
 - Dry run against a real pending file: `python3 auto_approve.py --dry-run [--date YYYY-MM-DD]`.
 
+**after auto-approve (same cron line) — `content_drafts.py`** — urgent-event content drafter:
+- Fires only when today's pending file has items tagged `"urgent": true` (announced mass revocation, root/CA distrust, obligation landing within ~60 days). Quiet days cost zero API calls.
+- Per urgent item (cap 3/run), one Claude call drafts a four-piece FixMyCert package: `blog.md`, `linkedin.md`, `youtube.md` (full NotebookLM + metadata publish package), `tweet.md` + `meta.json`, written to `content_drafts/<date>-<slug>/` in the repo and committed + pushed.
+- **Drafts only — nothing is ever published automatically.** Review before posting anywhere.
+- Dedup via `~/.pki-compliance-mcp/content_drafted.json` (anchor signatures, same machinery as the email backlog) — an urgent item lingering in the 14-day backlog drafts once. Rejected items never draft.
+- Always logs to `content_drafts.log`, which `daily_email.py` polls as the end-of-chain marker.
+- Fire drill: `python3 content_drafts.py --dry-run --pending-file <synthetic.json>` writes to `~/.pki-compliance-mcp/drafts_preview/` with no git, no state.
+
 **10:30 — `daily_doc_check.sh`** refreshes document version state.
-**10:35 — `daily_email.py`** sends the morning summary (Resend) — reports "N applied automatically, M queued for your review" with the itemized lists.
+**10:35 — `daily_email.py`** sends the morning summary (Resend) — reports "N applied automatically, M queued for your review" with the itemized lists, plus any content-draft packages (X + LinkedIn inline, blog/YouTube via repo path).
 
 ## Reviewing proposals (the only routine human task)
 
@@ -99,6 +107,8 @@ No pytest needed — plain scripts, no network calls:
 python3 -m py_compile pki_compliance_mcp.py compliance_auto_refresh.py
 python3 test_gating_dedup.py
 python3 test_source_url_and_estimates.py
+python3 test_auto_approve.py
+python3 test_content_drafts.py
 ```
 
 Requires `httpx`, `pydantic`, `feedparser` importable (the `mcp` package is optional). Both suites must pass before deploying. `test_source_url_and_estimates.py` also catches stale hardcoded statuses and regressions in the research-prompt guarantees.

@@ -52,21 +52,34 @@ def read_pending_updates(date_str: str) -> dict | None:
 
 
 def wait_for_morning_chain(date_str: str, max_wait_s: int = 1500) -> None:
-    """Block until the 10:00 research→auto-approve chain has finished.
+    """Block until the 10:00 research→auto-approve→content-drafts chain ends.
 
     Research can run past 10:35 on slow days (2026-07-12: 35 minutes, and the
-    email reported on a half-done run). auto_approve.py always writes a log
-    line when the chain ends — even on gate-skip days — so poll for today's
-    entry. Gives up after max_wait_s and lets the email report what it sees.
+    email reported on a half-done run). content_drafts.py is last in the
+    chain (added 2026-07-16) and always writes a log line — even on
+    no-urgent-items days — so poll for today's entry there. Safety valve: if
+    auto_approve.log shows today but content_drafts.log stays silent for 5
+    minutes after, assume the drafts step crashed and don't hold the email.
+    Gives up after max_wait_s and lets the email report what it sees.
     """
-    log_p = DATA_DIR / "auto_approve.log"
-    deadline = time.time() + max_wait_s
-    while time.time() < deadline:
+    drafts_p = DATA_DIR / "content_drafts.log"
+    approve_p = DATA_DIR / "auto_approve.log"
+
+    def _has_today(p: Path) -> bool:
         try:
-            if any(date_str in ln for ln in log_p.read_text(errors="replace").splitlines()):
-                return
+            return any(date_str in ln for ln in p.read_text(errors="replace").splitlines())
         except FileNotFoundError:
-            pass
+            return False
+
+    deadline = time.time() + max_wait_s
+    approve_seen_at = None
+    while time.time() < deadline:
+        if _has_today(drafts_p):
+            return
+        if approve_seen_at is None and _has_today(approve_p):
+            approve_seen_at = time.time()
+        if approve_seen_at is not None and time.time() - approve_seen_at > 300:
+            return
         time.sleep(30)
 
 
@@ -237,6 +250,37 @@ def auto_refresh_summary(log_lines: list[str]) -> dict:
     }
 
 
+DRAFTS_DIR = Path(os.environ.get("PKI_REPO_PATH",
+                                 "/opt/mcp-servers/pki-compliance-mcp")) / "content_drafts"
+
+
+def read_content_drafts(date_str: str) -> list[dict]:
+    """Draft packages content_drafts.py generated today for urgent items.
+
+    Each package dir holds blog.md / linkedin.md / youtube.md / tweet.md +
+    meta.json. The email inlines the two short pieces and points at the repo
+    for the rest. Drafts only — nothing here has been published.
+    """
+    out = []
+    if not DRAFTS_DIR.exists():
+        return out
+    for d in sorted(DRAFTS_DIR.glob(f"{date_str}-*")):
+        if not d.is_dir():
+            continue
+        pkg = {"name": d.name}
+        for piece in ("tweet", "linkedin"):
+            p = d / f"{piece}.md"
+            pkg[piece] = p.read_text(errors="replace").strip() if p.exists() else ""
+        try:
+            meta = json.loads((d / "meta.json").read_text())
+            pkg["title"] = (meta.get("source_item", {}).get("title")
+                            or meta.get("source_item", {}).get("id") or d.name)
+        except Exception:
+            pkg["title"] = d.name
+        out.append(pkg)
+    return out
+
+
 def read_approval(date_str: str) -> dict | None:
     """Read auto_approve.py output (10:15 cron): approval log + review queue."""
     log_p = DATA_DIR / f"approval_log_{date_str}.json"
@@ -256,7 +300,7 @@ def read_approval(date_str: str) -> dict | None:
     return out
 
 
-def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None) -> str:
+def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None, drafts: list[dict] | None = None) -> str:
     """Build the HTML email body. Plain-text fallback is built separately."""
     parts = []
     parts.append(f"<h2 style='margin:0 0 12px 0;font:600 18px/1.3 -apple-system,system-ui,sans-serif'>PKI Compliance daily report — {date_str}</h2>")
@@ -269,6 +313,22 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
         for o in urgent_items:
             parts.append(f"<li><strong>{escape(o['title'])}</strong>{' — ' + escape(o['date']) if o['date'] else ''} (first seen {escape(o['first_seen'])})</li>")
         parts.append("</ul>")
+
+    # Content drafts generated for today's urgent items — drafts only,
+    # nothing is published automatically.
+    if drafts:
+        parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>📝 Content drafts ready</h3>")
+        for pkg in drafts:
+            parts.append("<div style='border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin:0 0 10px 0'>")
+            parts.append(f"<p style='font:600 13px/1.4 -apple-system,system-ui,sans-serif;margin:0 0 6px 0'>{escape(pkg['title'])}</p>")
+            if pkg.get("tweet"):
+                parts.append(f"<p style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0 0 6px 0'><strong>X:</strong> {escape(pkg['tweet'])}</p>")
+            if pkg.get("linkedin"):
+                li = pkg["linkedin"]
+                li_short = li[:400] + ("…" if len(li) > 400 else "")
+                parts.append(f"<p style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0 0 6px 0;white-space:pre-line'><strong>LinkedIn:</strong> {escape(li_short)}</p>")
+            parts.append(f"<p style='font:12px/1.4 -apple-system,system-ui,sans-serif;color:#666;margin:0'>Blog post + YouTube package: <code>pki-compliance-mcp/content_drafts/{escape(pkg['name'])}/</code> in the repo (git pull). Drafts only — review before posting.</p>")
+            parts.append("</div>")
 
     # Top-line counts
     proposed_count = 0
@@ -422,8 +482,17 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
     return "<div style='max-width:640px'>" + "".join(parts) + "</div>"
 
 
-def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None) -> str:
+def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None, drafts: list[dict] | None = None) -> str:
     lines = [f"PKI Compliance daily report — {date_str}", "=" * 60, ""]
+
+    if drafts:
+        lines.append(f"CONTENT DRAFTS READY ({len(drafts)}):")
+        for pkg in drafts:
+            lines.append(f"  - {pkg['title']}")
+            if pkg.get("tweet"):
+                lines.append(f"    X: {pkg['tweet']}")
+            lines.append(f"    Full package: pki-compliance-mcp/content_drafts/{pkg['name']}/ (drafts only)")
+        lines.append("")
 
     proposed = 0
     if pending and "_parse_error" not in pending:
@@ -491,15 +560,23 @@ def main() -> int:
         print(f"WARNING: outstanding-items aggregation failed: {e}", file=sys.stderr)
         outstanding = None
 
+    try:
+        drafts = read_content_drafts(date_str)
+    except Exception as e:
+        print(f"WARNING: content-drafts read failed: {e}", file=sys.stderr)
+        drafts = []
+
     urgent_count = sum(1 for o in (outstanding or []) if o.get("urgent"))
     subject = f"[PKI Compliance] {date_str} — {proposed} proposed change(s)"
     if outstanding is not None:
         subject += f", {len(outstanding)} outstanding"
+    if drafts:
+        subject += f", {len(drafts)} content draft(s)"
     if urgent_count:
         subject = f"🚨 URGENT ({urgent_count}) — " + subject
 
-    html = render_html(date_str, pending, doc_check, auto_refresh, approval, outstanding)
-    text = render_text(date_str, pending, doc_check, auto_refresh, approval, outstanding)
+    html = render_html(date_str, pending, doc_check, auto_refresh, approval, outstanding, drafts)
+    text = render_text(date_str, pending, doc_check, auto_refresh, approval, outstanding, drafts)
 
     try:
         r = httpx.post(
