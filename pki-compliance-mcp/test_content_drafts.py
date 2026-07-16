@@ -85,12 +85,22 @@ DRAFTS = {
                 "notebooklm_visual_prompt": "visual",
                 "description": "desc", "pinned_comment": "📌 pin",
                 "thumbnail_prompt": "thumb"},
+    "kit_email": {"subject": "Mass revocation: 5-day window",
+                  "preview_text": "48k certs affected",
+                  "body_markdown": "Kit body\n\n- Patrick"},
 }
 entry = {"kind": "deadline", "sig": car._sig(URGENT_DL), "item": URGENT_DL}
 out_dir = cd.write_drafts(tmp / "repo_drafts", "2026-07-16", DRAFTS, entry)
 check("dir named date-slug", out_dir.name == "2026-07-16-mass-revocation-event")
-for f in ("blog.md", "linkedin.md", "tweet.md", "youtube.md", "meta.json"):
+for f in ("blog.md", "linkedin.md", "tweet.md", "youtube.md",
+          "kit_broadcast.md", "meta.json"):
     check(f"writes {f}", (out_dir / f).exists())
+kit_text = (out_dir / "kit_broadcast.md").read_text()
+check("kit has audience scoping note", "19302998" in kit_text
+      and "NOT the full list" in kit_text)
+check("kit has subject and body",
+      "Mass revocation: 5-day window" in kit_text and "Kit body" in kit_text)
+check("kit marked draft never auto-send", "never auto-send" in kit_text)
 meta = json.loads((out_dir / "meta.json").read_text())
 check("meta records signature", meta["signature"] == entry["sig"])
 check("meta marked unpublished", "not published" in meta["status"])

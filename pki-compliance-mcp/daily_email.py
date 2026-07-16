@@ -327,7 +327,7 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
                 li = pkg["linkedin"]
                 li_short = li[:400] + ("…" if len(li) > 400 else "")
                 parts.append(f"<p style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0 0 6px 0;white-space:pre-line'><strong>LinkedIn:</strong> {escape(li_short)}</p>")
-            parts.append(f"<p style='font:12px/1.4 -apple-system,system-ui,sans-serif;color:#666;margin:0'>Blog post + YouTube package: <code>pki-compliance-mcp/content_drafts/{escape(pkg['name'])}/</code> in the repo (git pull). Drafts only — review before posting.</p>")
+            parts.append(f"<p style='font:12px/1.4 -apple-system,system-ui,sans-serif;color:#666;margin:0'>Blog post, YouTube package + Kit broadcast: <code>pki-compliance-mcp/content_drafts/{escape(pkg['name'])}/</code> in the repo (git pull). Drafts only — review before posting.</p>")
             parts.append("</div>")
 
     # Top-line counts

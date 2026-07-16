@@ -4,15 +4,19 @@
 Chained in the 10:00 UTC crontab line after auto_approve.py. When today's
 research produced items tagged "urgent": true (announced mass revocation,
 distrust of a trusted root/CA, or a compliance obligation landing within ~60
-days), drafts a four-piece FixMyCert content package per item:
+days), drafts a five-piece FixMyCert content package per item:
 
-  blog.md      - FixMyCert blog post (markdown, enterprise cert-team reader)
-  linkedin.md  - LinkedIn post
-  youtube.md   - full YouTube publish package (NotebookLM audio + visual
-                 prompts, title, description, pinned comment, thumbnail
-                 prompt) following the fixmycert-youtube-publisher skill
-                 conventions
-  tweet.md     - X post (<=280 chars)
+  blog.md          - FixMyCert blog post (markdown, enterprise cert-team reader)
+  linkedin.md      - LinkedIn post
+  youtube.md       - full YouTube publish package (NotebookLM audio + visual
+                     prompts, title, description, pinned comment, thumbnail
+                     prompt) following the fixmycert-youtube-publisher skill
+                     conventions
+  tweet.md         - X post (<=280 chars)
+  kit_broadcast.md - Kit email broadcast (subject, preview text, body) with
+                     an operator header: audience MUST be scoped to the
+                     FixMyCert brand tag (brand:fmc, tag 19302998), never
+                     the full list, and never auto-sent
 
 DRAFTS ONLY - nothing is published anywhere. Files land in the repo under
 content_drafts/<date>-<slug>/ and are committed + pushed so they show up
@@ -148,6 +152,20 @@ short paragraphs, ends with a question or discussion prompt, then \
 https://fixmycert.com/compliance. Lead with the concrete fact, not hype. \
 1-2 hashtags.
 
+"kit_email": object for a Kit email broadcast to the FixMyCert list \
+(enterprise cert practitioners and kit buyers) with:
+  "subject": max 60 chars, concrete and direct - the fact, not hype \
+(house style: "New from FixMyCert: the 47-Day Readiness Kit").
+  "preview_text": max 90 chars, adds a second concrete detail the \
+subject didn't cover.
+  "body_markdown": 250-400 words. Personal but efficient - written as \
+Patrick from FixMyCert emailing practitioners who trust him for exactly \
+this kind of alert. Structure: one-line what-happened; who is affected \
+(and who can ignore it); key dates as a short list; 3-4 concrete next \
+steps; close with the live tracker link \
+https://fixmycert.com/compliance. No hard sell - this email is the \
+product. Sign off "- Patrick".
+
 "youtube": object with:
   "title": 50-65 chars, front-loaded primary keyword, pattern \
 "[Primary Keyword] - [Hook/Value Prop]", title case, no clickbait.
@@ -258,9 +276,20 @@ def write_drafts(base_dir: Path, date_str: str, drafts: dict, entry: dict) -> Pa
             ("Thumbnail prompt", "thumbnail_prompt"),
         )
     )
+    kit = drafts.get("kit_email") or {}
+    kit_md = (
+        "<!-- OPERATOR NOTES - do not send as-is:\n"
+        "     audience: FixMyCert brand ONLY (brand:fmc, tag 19302998) - NOT the full list\n"
+        "     sender:   Patrick from FixMyCert <patrick@fixmycert.com> (account default)\n"
+        "     This is a DRAFT. Create in Kit as a draft broadcast; never auto-send. -->\n\n"
+        f"## Subject\n\n{kit.get('subject', '(missing)')}\n\n"
+        f"## Preview text\n\n{kit.get('preview_text', '(missing)')}\n\n"
+        f"## Body\n\n{kit.get('body_markdown', '(missing)')}"
+    )
     (out_dir / "blog.md").write_text(drafts.get("blog_markdown", "(missing)") + "\n")
     (out_dir / "linkedin.md").write_text(drafts.get("linkedin", "(missing)") + "\n")
     (out_dir / "tweet.md").write_text(drafts.get("tweet", "(missing)") + "\n")
+    (out_dir / "kit_broadcast.md").write_text(kit_md + "\n")
     (out_dir / "youtube.md").write_text(
         f"# YouTube publish package - {yt.get('title', slug)}\n\n{yt_md}\n")
     (out_dir / "meta.json").write_text(json.dumps({

@@ -65,8 +65,8 @@ Each `DEADLINES` entry:
 
 **after auto-approve (same cron line) — `content_drafts.py`** — urgent-event content drafter:
 - Fires only when today's pending file has items tagged `"urgent": true` (announced mass revocation, root/CA distrust, obligation landing within ~60 days). Quiet days cost zero API calls.
-- Per urgent item (cap 3/run), one Claude call drafts a four-piece FixMyCert package: `blog.md`, `linkedin.md`, `youtube.md` (full NotebookLM + metadata publish package), `tweet.md` + `meta.json`, written to `content_drafts/<date>-<slug>/` in the repo and committed + pushed.
-- **Drafts only — nothing is ever published automatically.** Review before posting anywhere.
+- Per urgent item (cap 3/run), one Claude call drafts a five-piece FixMyCert package: `blog.md`, `linkedin.md`, `youtube.md` (full NotebookLM + metadata publish package), `tweet.md`, `kit_broadcast.md` (Kit email: subject/preview/body + operator notes) + `meta.json`, written to `content_drafts/<date>-<slug>/` in the repo and committed + pushed.
+- **Drafts only — nothing is ever published automatically.** Review before posting anywhere. The Kit broadcast must be scoped to the FixMyCert brand tag (`brand:fmc`, tag 19302998) — never the full list.
 - Dedup via `~/.pki-compliance-mcp/content_drafted.json` (anchor signatures, same machinery as the email backlog) — an urgent item lingering in the 14-day backlog drafts once. Rejected items never draft.
 - Always logs to `content_drafts.log`, which `daily_email.py` polls as the end-of-chain marker.
 - Fire drill: `python3 content_drafts.py --dry-run --pending-file <synthetic.json>` writes to `~/.pki-compliance-mcp/drafts_preview/` with no git, no state.
