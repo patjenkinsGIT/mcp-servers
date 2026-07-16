@@ -39,6 +39,9 @@ Usage:
 
 Env: ANTHROPIC_API_KEY required to draft (a no-urgent-items run exits clean
 without it). PKI_REPO_PATH optional override, same default as the pipeline.
+NTFY_TOPIC optional: when set, new urgent items trigger an iPhone push via
+ntfy.sh (sent as soon as items are detected, before drafting, so the alert
+lands even if generation fails; skipped on --dry-run).
 """
 
 import argparse
@@ -117,6 +120,43 @@ def collect_urgent(pending: dict) -> list[dict]:
                 continue
             out.append({"kind": "flagged", "sig": sig, "item": it})
     return out
+
+
+# ---------------------------------------------------------------------------
+# Push notification (ntfy.sh)
+# ---------------------------------------------------------------------------
+
+
+def notify_urgent(urgent: list[dict]) -> None:
+    """Push an iPhone notification for new urgent items via ntfy.sh.
+
+    No-op unless NTFY_TOPIC is set. Best effort: a push failure must never
+    block drafting, so errors are logged and swallowed.
+    """
+    topic = os.environ.get("NTFY_TOPIC", "").strip()
+    if not topic:
+        return
+    titles = "\n".join(
+        f"• {(e['item'].get('title') or e['item'].get('id') or '(untitled)')[:120]}"
+        for e in urgent
+    )
+    body = (f"{titles}\n\nContent drafts are being generated - "
+            "check the morning email / repo.")
+    try:
+        httpx.post(
+            f"https://ntfy.sh/{topic}",
+            content=body.encode(),
+            headers={
+                "Title": f"🚨 {len(urgent)} urgent PKI event(s) detected",
+                "Priority": "high",
+                "Tags": "rotating_light,lock",
+                "Click": "https://fixmycert.com/compliance",
+            },
+            timeout=15,
+        ).raise_for_status()
+        log(f"content_drafts: push notification sent ({len(urgent)} item(s))")
+    except Exception as e:
+        log(f"content_drafts: push notification failed ({e}) - continuing")
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +411,9 @@ def main() -> int:
     if not urgent:
         log(f"content_drafts: no new urgent items for {args.date} - nothing to draft")
         return 0
+
+    if not args.dry_run:
+        notify_urgent(urgent)
 
     if len(urgent) > MAX_DRAFTS_PER_RUN:
         log(f"content_drafts: {len(urgent)} urgent items, capping at "

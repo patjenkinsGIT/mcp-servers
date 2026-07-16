@@ -69,6 +69,7 @@ Each `DEADLINES` entry:
 - **Drafts only — nothing is ever published automatically.** Review before posting anywhere. The Kit broadcast must be scoped to the FixMyCert brand tag (`brand:fmc`, tag 19302998) — never the full list.
 - Dedup via `~/.pki-compliance-mcp/content_drafted.json` (anchor signatures, same machinery as the email backlog) — an urgent item lingering in the 14-day backlog drafts once. Rejected items never draft.
 - Always logs to `content_drafts.log`, which `daily_email.py` polls as the end-of-chain marker.
+- **iPhone push**: when `NTFY_TOPIC` is set in the droplet `.env` (it is; value in that file), new urgent items send a high-priority push via ntfy.sh the moment they're detected — before drafting, so the alert lands even if generation fails. Subscribe to the topic in the ntfy iOS app. Dry runs never push.
 - Fire drill: `python3 content_drafts.py --dry-run --pending-file <synthetic.json>` writes to `~/.pki-compliance-mcp/drafts_preview/` with no git, no state.
 
 **10:30 — `daily_doc_check.sh`** refreshes document version state.

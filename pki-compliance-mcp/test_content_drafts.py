@@ -149,6 +149,46 @@ text = de.render_text("2026-07-16", None, doc_check, auto_refresh, drafts=pkgs)
 check("text has drafts block", "CONTENT DRAFTS READY (1)" in text)
 check("text names package dir", "2026-07-16-mass-revocation-event" in text)
 
+print("== notify_urgent ==")
+import os
+os.environ.pop("NTFY_TOPIC", None)
+calls = []
+_orig_post = cd.httpx.post
+cd.httpx.post = lambda *a, **k: calls.append((a, k)) or (_ for _ in ()).throw(
+    AssertionError("should not post without NTFY_TOPIC"))
+cd.notify_urgent([{"item": URGENT_DL}])
+check("no-op without NTFY_TOPIC", calls == [])
+
+
+class _FakeResp:
+    def raise_for_status(self):
+        pass
+
+
+cd.httpx.post = lambda *a, **k: calls.append((a, k)) or _FakeResp()
+os.environ["NTFY_TOPIC"] = "test-topic"
+cd.notify_urgent([{"item": URGENT_DL}])
+check("posts to topic when set",
+      len(calls) == 1 and calls[0][0][0].endswith("/test-topic"))
+check("title carries count",
+      "1 urgent" in calls[0][1]["headers"]["Title"])
+check("body names the item",
+      "Mass Revocation Event" in calls[0][1]["content"].decode())
+
+
+def _boom(*a, **k):
+    raise RuntimeError("network down")
+
+
+cd.httpx.post = _boom
+try:
+    cd.notify_urgent([{"item": URGENT_DL}])
+    check("push failure swallowed", True)
+except Exception:
+    check("push failure swallowed", False)
+cd.httpx.post = _orig_post
+os.environ.pop("NTFY_TOPIC", None)
+
 print("== cap ==")
 many = {"new_deadlines": [
     {"id": f"u{i}", "date": "2026-08-01", "title": f"Urgent {i}", "urgent": True}
