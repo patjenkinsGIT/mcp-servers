@@ -44,6 +44,9 @@ PKI_CONTAINER = os.environ.get("PKI_CONTAINER", "pki-compliance-mcp")
 MAX_DAYS_BETWEEN_RESEARCH = int(os.environ.get("MAX_DAYS_BETWEEN_RESEARCH", "7"))
 LAST_RESEARCH_FILE = DATA_DIR / "last_research.json"
 REJECTED_FILE = DATA_DIR / "rejected.json"
+# Manual holds that outlive flag age-out: {"sc101": "2026-08-08", ...}
+# (anchor token -> hold-until date, inclusive). See held_review_anchors().
+HOLDS_FILE = DATA_DIR / "review_holds.json"
 
 # ---------------------------------------------------------------------------
 # Research queries
@@ -499,6 +502,18 @@ _ANCHOR_CANON = {
 }
 
 
+def _canon_anchor(a: str) -> str:
+    """Canonical anchor token: lowercase, no spaces/dashes, variant-folded.
+    Ballot references vary day to day in zero-padding and version suffix
+    (SC101 / SC0101v2 / SC0101 are the same ballot family)."""
+    a = re.sub(r"[\s-]", "", a.lower())
+    a = _ANCHOR_CANON.get(a, a)
+    b = re.match(r"^(sc|csc|smc|cscwg)0*(\d+)(?:v\d+)?$", a)
+    if b:
+        a = b.group(1) + b.group(2)
+    return a
+
+
 def _review_sig(item) -> str:
     """Signature for a needs_human_review flag, stable across model runs."""
     if isinstance(item, dict):
@@ -508,21 +523,42 @@ def _review_sig(item) -> str:
         text = str(item)
     anchors = set()
     for m in _REVIEW_ANCHOR_RE.finditer(text):
-        a = re.sub(r"[\s-]", "", m.group(1).lower())
-        a = _ANCHOR_CANON.get(a, a)
-        # Ballot references vary day to day in zero-padding and version suffix
-        # (SC101 / SC0101v2 / SC0101 are the same ballot family) — canonicalize.
-        b = re.match(r"^(sc|csc|smc|cscwg)0*(\d+)(?:v\d+)?$", a)
-        if b:
-            a = b.group(1) + b.group(2)
-        anchors.add(a)
+        anchors.add(_canon_anchor(m.group(1)))
     if anchors:
         return "anchors:" + "+".join(sorted(anchors))
     return "text:" + " ".join(_norm(text).split()[:12])
 
 
+def load_manual_holds() -> set:
+    """Anchors from HOLDS_FILE whose hold-until date hasn't passed.
+
+    Flag-derived holds age out with the 14-day pending-file window, which can
+    lift a hold before the underlying event (ballot vote, IPR review end).
+    HOLDS_FILE pins a hold to an explicit date instead. An unparseable date
+    keeps the hold (fail safe — a typo must not lift a hold silently)."""
+    try:
+        data = json.loads(HOLDS_FILE.read_text())
+    except FileNotFoundError:
+        return set()
+    except Exception as e:
+        print(f"WARNING: unreadable {HOLDS_FILE.name} ({e}) — holding nothing from it")
+        return set()
+    today = datetime.now(timezone.utc).date()
+    anchors = set()
+    for anchor, until in data.items():
+        try:
+            expired = datetime.strptime(str(until), "%Y-%m-%d").date() < today
+        except ValueError:
+            print(f"WARNING: bad hold-until date {until!r} for {anchor!r} — keeping hold")
+            expired = False
+        if not expired:
+            anchors.add(_canon_anchor(anchor))
+    return anchors
+
+
 def held_review_anchors(days: int = 14) -> set:
-    """Anchor tokens from non-rejected review flags in recent pending files.
+    """Anchor tokens from non-rejected review flags in recent pending files,
+    plus unexpired manual holds from HOLDS_FILE.
 
     A topic a human is still deciding on (e.g. a ballot held for IPR review)
     must not be auto-applied even if a later research run re-proposes it as a
@@ -530,7 +566,7 @@ def held_review_anchors(days: int = 14) -> set:
     (2026-07-12: auto-approve shipped SC0101v2 three weeks before its IPR
     review ended because it had no view of held topics.)"""
     rejected = load_rejected()
-    anchors: set = set()
+    anchors: set = load_manual_holds()
     cutoff = datetime.now(timezone.utc).date() - timedelta(days=days)
     for f in sorted(DATA_DIR.glob("pending_updates_*.json")):
         ds = f.stem.replace("pending_updates_", "")

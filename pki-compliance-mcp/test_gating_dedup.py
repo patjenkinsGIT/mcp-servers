@@ -28,6 +28,7 @@ def with_tmp():
     car.DATA_DIR = d
     car.REJECTED_FILE = d / "rejected.json"
     car.LAST_RESEARCH_FILE = d / "last_research.json"
+    car.HOLDS_FILE = d / "review_holds.json"
     return d
 
 
@@ -228,6 +229,42 @@ saved = json.loads(car.REJECTED_FILE.read_text())
 check("foo persisted to rejected ids", "foo" in saved["ids"])
 check("signature captured from pending file", "foo thing|2026-07-01" in saved["signatures"])
 check("reject returns total count", total == 1)
+
+print("== hold age-out + manual holds (2026-07-18) ==")
+d = with_tmp()
+OLD = (datetime.now(timezone.utc).date() - timedelta(days=15)).isoformat()
+RECENT = (datetime.now(timezone.utc).date() - timedelta(days=13)).isoformat()
+FLAG = {"needs_human_review": [
+    {"id": "review-sc0101v2-ipr", "description": "SC0101v2 in IPR review"}]}
+(d / f"pending_updates_{OLD}.json").write_text(json.dumps(FLAG))
+check("flag-derived hold ages out after 14 days",
+      "sc101" not in car.held_review_anchors())
+(d / f"pending_updates_{RECENT}.json").write_text(json.dumps(FLAG))
+check("flag within window holds", "sc101" in car.held_review_anchors())
+
+d = with_tmp()
+(d / f"pending_updates_{OLD}.json").write_text(json.dumps(FLAG))
+FUTURE = (datetime.now(timezone.utc).date() + timedelta(days=10)).isoformat()
+YDAY2 = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+car.HOLDS_FILE.write_text(json.dumps({
+    "SC0101v2": FUTURE,       # spelled like the ballot, not the canonical token
+    "smc17": FUTURE,
+    "csc32": YDAY2,           # expired yesterday
+    "dora": "not-a-date",     # typo must NOT silently lift the hold
+}))
+held = car.held_review_anchors()
+check("manual hold outlives flag age-out", "sc101" in held)
+check("manual hold anchor is canonicalized", "sc0101v2" not in held)
+check("second manual hold present", "smc17" in held)
+check("expired manual hold lifted", "csc32" not in held)
+check("unparseable hold-until date keeps hold (fail safe)", "dora" in held)
+d = with_tmp()
+TODAY2 = datetime.now(timezone.utc).date().isoformat()
+car.HOLDS_FILE.write_text(json.dumps({"nis2": TODAY2}))
+check("hold-until is inclusive: expires end of that day",
+      "nis2" in car.load_manual_holds())
+with_tmp()
+check("no holds file -> no manual holds", car.load_manual_holds() == set())
 
 print(f"\n{PASS} passed, {FAIL} failed")
 raise SystemExit(1 if FAIL else 0)
