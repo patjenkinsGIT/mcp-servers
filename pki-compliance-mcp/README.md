@@ -52,11 +52,11 @@ Each `DEADLINES` entry:
 1. **Cost gate** (`should_run_research`) — runs a cheap document-hash check in the MCP container (no AI tokens). Skips the day entirely if no tracked document changed and research ran within the last 7 days. A weekly safety net forces a run; `--force` overrides manually. A skipped day costs zero Anthropic API calls.
 2. **Research** — runs the `RESEARCH_QUERIES` via Claude with web search.
 3. **Diff analysis** — compares findings to live `/api/compliance-data` under `DIFF_SYSTEM_PROMPT` (date precision rules, mandatory `source_url`, unsure → `needs_human_review`).
-4. **Dedup** (`dedup_changes`) — drops proposals already in `DEADLINES` (by id or normalized title+date signature), already-current document versions, and previously rejected ids.
+4. **Dedup** (`dedup_changes`) — drops proposals already in `DEADLINES` (by id or normalized title+date signature), already-current document versions, and previously rejected ids. Review flags additionally dedup against the last 14 days of pending files by anchor signature (ballot codes, regulation names — model-generated ids are not stable day to day), so a held topic appears in the email once per 14 days, not daily.
 5. **Output** — writes `~/.pki-compliance-mcp/pending_updates_<date>.json`.
 
-**10:15 — `auto_approve.py`** — tiered auto-approval of the pending file:
-- **AUTO** (applied, committed, pushed, service restarted): new deadlines that pass ALL of — required fields present; `source_url` on the primary-source allowlist (CABF, browser vendors, NIST/NSA, EUR-Lex, UK Parliament, github.com only under `/cabforum/`); `feed_confirmed: true`; not a duplicate; not previously rejected. Document version bumps for known doc ids.
+**after research (same cron line) — `auto_approve.py`** — tiered auto-approval of the pending file (was a fixed 10:15 slot, which raced the 20–30 min research run; chained since 2026-07-09):
+- **AUTO** (applied, committed, pushed, service restarted): new deadlines that pass ALL of — required fields present; `source_url` on the primary-source allowlist (CABF, browser vendors, NIST/NSA, EUR-Lex, UK Parliament, github.com only under `/cabforum/`); `feed_confirmed: true`; not a duplicate; not previously rejected; topic not under an open review hold (see "Review holds" below). Document version bumps for known doc ids.
 - **REVIEW** (queued in `review_queue_<date>.json`): everything else — updates to existing entries (covers estimated-date discipline), regulatory updates, anything flagged, conflicting candidates (two touching the same id), and everything when the daily cap (`--max-auto`, default 5) is exceeded — a burst of "approvable" items usually means an upstream break.
 - **Fail-safe**: if the repo working tree is dirty or `git push` is unavailable, nothing is applied — everything queues. Before any write it backs up the source to `~/.pki-compliance-mcp/backups/`, and after patching it must pass `py_compile` + both test suites or it rolls back.
 - Auto-applies bump `lastUpdated` and the deadlines field verification, but **not** `lastFullReview` — the 45-day stale clock still requires a human review.
@@ -90,6 +90,19 @@ cd /opt/mcp-servers/pki-compliance-mcp
 python3 compliance_auto_refresh.py --reject <id> [<id> ...]
 python3 compliance_auto_refresh.py --list-rejected   # inspect the rejected list
 ```
+
+## Review holds
+
+A topic under active human review (e.g. a ballot in its IPR review period) must never auto-apply, however confident today's research is — the hold outranks the model. (2026-07-12: auto-approve shipped SC0101v2 three weeks before its IPR review ended because it had no view of held topics.) `held_review_anchors()` builds the hold set from two sources:
+
+1. **Flag-derived** (automatic): anchor tokens from non-rejected `needs_human_review` flags in the last **14 days** of pending files. These age out — a hold silently lapses 14 days after its flag even if the underlying event (IPR end, ballot vote) is later. Discovered 2026-07-18 when the SC101/SMC017 holds from 7/04 flags were about to lift weeks before their events.
+2. **Manual** (`~/.pki-compliance-mcp/review_holds.json`, on the droplet, not in git): `{"sc101": "2026-08-08", "smc17": "2026-08-01"}` — anchor token → hold-until date (**inclusive**). Use this whenever a hold must outlive the 14-day flag window; pin it to the event date plus a couple of days of buffer.
+
+Manual-hold conventions:
+- Keys are canonicalized like flag anchors, so `SC0101v2`, `sc101v2`, and `sc101` are the same hold.
+- An unparseable date **keeps** the hold (fail safe — a typo must not lift a hold silently); a warning is printed to the cron log.
+- Expired entries are inert; no cleanup needed. Editing the file needs no restart — cron scripts read it fresh each run.
+- If a ballot/IPR date shifts, update the hold-until date on the droplet.
 
 **After a substantive review, bump the freshness stamp** — `DATA_FRESHNESS["lastFullReview"]` (and the relevant `fieldVerifications` dates + `COMPLIANCE_METADATA["lastUpdated"]`) in `pki_compliance_mcp.py`. Nothing bumps these automatically; 45 days after `lastFullReview` the dashboard and the public site show a "data is stale" banner. The ops dashboard lives at `/dashboard?token=<DASHBOARD_TOKEN>` (token in the droplet's `.env`/crontab).
 
