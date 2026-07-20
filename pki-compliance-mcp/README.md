@@ -156,9 +156,13 @@ Note: `/api/compliance-data` is served with a 1-hour cache header — browsers m
 ## Front-end (separate codebase)
 
 The Compliance Hub UI lives in the **FixMyCert** Replit app — not in this repo. It fetches `/api/compliance-data` and renders:
-- `is_estimated` → `~ Est.` badge
+- `is_estimated` → `~ Est.` badge (on upcoming and past/completed cards alike)
 - `source_url` → "Source" link (opens in new tab; absent/null renders nothing)
 - `relatedGuides` → "Related Guides" chips (API chips first, deduped by URL against the front-end's own keyword-heuristic chips; heuristic-only when the API list is empty; `hasVideo: true` → ▶ badge on the chip)
+- `impact` + `isMajor` → impact banner: red "MAJOR IMPACT" when `isMajor: true`, neutral "IMPACT" otherwise. The backend always sends `impact` as a prose sentence now; a legacy safety net still turns a bare `high`/`medium`/`low` into a severity pill, but no deadline should hit that path (guarded by `test_source_url_and_estimates.py`).
+- `note` → muted "Note:" line below the description (e.g. date-change history); absent → nothing
+- `daysUntil` → color-coded days-remaining text everywhere it appears (hero banner, Upcoming strip, Also Approaching cards, timeline date chips): **red ≤30 days, amber 31–60, green >60**. Same thresholds as the timeline legend's status dots. Past/completed counts ("34d ago") keep muted styling.
+- **Export CSV** button (header, next to Copy/Share) → plain `<a download>` to `/api/compliance/deadlines.csv`, appending the active Timeline filters (`category`, `framework`, `jurisdiction`, `status`, `within_days`) as query params so the export matches the on-screen view; bare URL exports all deadlines. The endpoint sets the filename and download headers, so no client-side CSV code is needed.
 - "Show Past" toggle → full multi-year past history grouped by year (default view shows last 90 days)
 
 Data-only changes here flow to the site automatically (after cache expiry). Front-end *code* changes are made in Replit and require a republish there.
