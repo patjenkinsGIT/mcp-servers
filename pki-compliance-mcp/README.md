@@ -35,6 +35,9 @@ Each `DEADLINES` entry:
     "is_estimated": True,            # date is not day-precise (see conventions below)
     "source_url": "https://...",     # link to the authoritative source
     "ballotStatus": "passed",        # tracks the BALLOT, not the deadline
+    "relatedGuides": [               # explicit override; omit to inherit defaults
+        {"title": "...", "url": "/guides/...", "hasVideo": True},
+    ],
 }
 ```
 
@@ -45,6 +48,7 @@ Each `DEADLINES` entry:
 - **Date precision** — a day-precise date is only used when a primary source explicitly states that exact day. If a source gives only a month/quarter/year, the entry uses the *last day* of that period and sets `"is_estimated": True`. The front-end renders this as a `~ Est.` badge. Never invent a specific day.
 - **`source_url`** — link to the authoritative source (the CABF ballot page, root program policy, EUR-Lex text, official government page). Verify the URL resolves before committing. The front-end renders it as a "Source" link; entries without one render normally. Only add URLs you have actually verified — no guessing (that's the whole point).
 - **Status is computed, never stored** — `get_all_deadlines_unified()` derives `status` from the date on every request (`upcoming`/`passed`). Do **not** hardcode `"status"` on deadline entries; it will drift as dates pass. The only exception is `"status": "ongoing"`, which is preserved. `ballotStatus: "passed"` means the *ballot* passed voting — the deadline itself stays `upcoming` until its effective date.
+- **`relatedGuides`** — every unified deadline carries a `relatedGuides` list of `{title, url, hasVideo}` chips pointing at fixmycert.com guides. Resolution order: explicit `relatedGuides` on the entry → `CATEGORY_RELATED_GUIDES` by category → the owning framework's `/guides/` `resource_link` → `[]`. `hasVideo` marks guides with an embedded video so the UI can badge the chip. Verify paths against the content tracker (`ct_get_content`) before adding — same no-guessing rule as `source_url`. The `certificates` category is deliberately unmapped (too heterogeneous); use per-entry overrides there. The front-end renders these chips first and keeps its keyword heuristic only as a fallback for deadlines with none. Tests: `test_related_guides.py`.
 
 ## Daily automated flow (times UTC, cron on the droplet)
 
@@ -154,6 +158,7 @@ Note: `/api/compliance-data` is served with a 1-hour cache header — browsers m
 The Compliance Hub UI lives in the **FixMyCert** Replit app — not in this repo. It fetches `/api/compliance-data` and renders:
 - `is_estimated` → `~ Est.` badge
 - `source_url` → "Source" link (opens in new tab; absent/null renders nothing)
+- `relatedGuides` → "Related Guides" chips (API chips first, deduped by URL against the front-end's own keyword-heuristic chips; heuristic-only when the API list is empty; `hasVideo: true` → ▶ badge on the chip)
 - "Show Past" toggle → full multi-year past history grouped by year (default view shows last 90 days)
 
 Data-only changes here flow to the site automatically (after cache expiry). Front-end *code* changes are made in Replit and require a republish there.

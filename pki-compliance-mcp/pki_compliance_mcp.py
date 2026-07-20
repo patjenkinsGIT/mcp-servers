@@ -1045,6 +1045,61 @@ DEADLINES = [
 ]
 
 # =============================================================================
+# RELATED GUIDES - fixmycert.com guides attached to deadlines
+# Default mapping by deadline category; a deadline entry can set its own
+# "relatedGuides" list to override (entry value wins, no merge). The frontend
+# renders these chips first and only falls back to its keyword heuristic when
+# a deadline has none. "hasVideo" marks guides with an embedded video so the
+# UI can badge the chip. Paths are verified against the content tracker —
+# check ct_get_content before adding a new one; "certificates" is deliberately
+# unmapped (too heterogeneous: validity reductions, distrusts, linting).
+# =============================================================================
+
+CATEGORY_RELATED_GUIDES = {
+    "certificate-transparency": [
+        {"title": "Certificate Transparency", "url": "/guides/certificate-transparency", "hasVideo": True},
+    ],
+    "root-store": [
+        {"title": "Root Stores", "url": "/guides/root-stores", "hasVideo": False},
+    ],
+    "eku": [
+        {"title": "ClientAuth EKU Deprecation Guide", "url": "/guides/client-authentication-eku-sunset", "hasVideo": True},
+        {"title": "How to Find Client Authentication Certificates", "url": "/guides/find-client-authentication-certificates", "hasVideo": True},
+    ],
+    "pqc": [
+        {"title": "Post-Quantum Cryptography", "url": "/guides/post-quantum-cryptography", "hasVideo": False},
+    ],
+    "validation": [
+        {"title": "Domain Validation Methods", "url": "/guides/domain-validation-methods", "hasVideo": False},
+        {"title": "DCV Methods Sunset", "url": "/guides/dcv-methods-sunset", "hasVideo": True},
+    ],
+    "revocation": [
+        {"title": "Revocation", "url": "/guides/revocation", "hasVideo": False},
+    ],
+}
+
+# Explicit override shared by the validity-reduction entries (category
+# "certificates" has no default, see above).
+_VALIDITY_TIMELINE_GUIDES = [
+    {"title": "47-Day Certificate Timeline", "url": "/guides/47-day-certificate-timeline", "hasVideo": True},
+]
+
+_VALIDITY_TIMELINE_DEADLINE_IDS = {
+    "validity-200-days",
+    "validity-100-days",
+    "validity-47-days",
+    "short-lived-cert-threshold-7-days",
+}
+
+for _entry in DEADLINES:
+    if _entry["id"] in _VALIDITY_TIMELINE_DEADLINE_IDS:
+        _entry["relatedGuides"] = _VALIDITY_TIMELINE_GUIDES
+    # Categorized root-store (it's a Chrome Root Program change) but the
+    # topic is ClientAuth EKU — the EKU guides fit better than Root Stores.
+    elif _entry["id"] == "chrome-clientauth-leaf-sunset":
+        _entry["relatedGuides"] = CATEGORY_RELATED_GUIDES["eku"]
+
+# =============================================================================
 # REGULATORY FRAMEWORKS - DORA, NIS2, UK CSR Bill
 # These track regulatory compliance that impacts certificate management
 # =============================================================================
@@ -1127,7 +1182,7 @@ REGULATORY_FRAMEWORKS = [
         "description": "EU directive expanding cybersecurity requirements to essential and important entities across multiple sectors.",
         "applies_to": ["Energy", "Transport", "Banking", "Health", "Digital infrastructure", "ICT service management", "Public administration"],
         "certificate_relevance": "Encryption requirements, supply chain security, incident notification for certificate outages",
-        "resource_link": None,
+        "resource_link": "/guides/nis2-certificate-management",
         "deadlines": [
             {
                 "id": "nis2-transposition",
@@ -1231,7 +1286,7 @@ REGULATORY_FRAMEWORKS = [
         "description": "UK legislation to strengthen cyber resilience of critical infrastructure and digital services, expanding NIS regulations.",
         "applies_to": ["Critical national infrastructure", "Digital service providers", "Managed service providers"],
         "certificate_relevance": "Expected to include requirements similar to DORA for certificate management and ICT resilience",
-        "resource_link": None,
+        "resource_link": "/guides/uk-csr-bill-certificate-management",
         "deadlines": [
             {
                 "id": "uk-csr-introduced",
@@ -3462,6 +3517,19 @@ def get_all_deadlines_unified() -> List[Dict[str, Any]]:
         "nsa": "nsa",
     }
 
+    # Frameworks with an on-site guide (resource_link under /guides/) lend it
+    # to their deadlines as a relatedGuides fallback — used when neither the
+    # entry nor its category provides guides.
+    framework_guides_by_id = {}
+    for framework in REGULATORY_FRAMEWORKS:
+        link = framework.get("resource_link")
+        if link and link.startswith("/guides/"):
+            framework_guides_by_id[framework["framework_id"]] = [{
+                "title": f"{framework['name']} Certificate Management",
+                "url": link,
+                "hasVideo": False,
+            }]
+
     for d in DEADLINES:
         source = d.get("source", "unknown")
         default_jurisdiction = "us" if source in ("nist", "nsa") else "global"
@@ -3478,15 +3546,26 @@ def get_all_deadlines_unified() -> List[Dict[str, Any]]:
             else calculate_status(d["date"], ballot_status)
         )
 
-        all_deadlines.append({
+        entry = {
             "framework_id": default_framework_id,
             "jurisdiction": default_jurisdiction,
             "status": default_status,
             "source_url": None,
             **d,  # entry-level fields override heuristic defaults
-        })
+        }
+        if "relatedGuides" not in entry:
+            entry["relatedGuides"] = (
+                CATEGORY_RELATED_GUIDES.get(entry.get("category"))
+                or framework_guides_by_id.get(entry.get("framework_id"))
+                or []
+            )
+        all_deadlines.append(entry)
 
     for framework in REGULATORY_FRAMEWORKS:
+        # Framework deadline categories (effective, reporting, registration)
+        # are framework-generic, so the framework's own guide is usually what
+        # the category map falls through to here.
+        framework_guides = framework_guides_by_id.get(framework["framework_id"], [])
         for deadline in framework.get("deadlines", []):
             all_deadlines.append({
                 "framework_id": framework["framework_id"],
@@ -3496,6 +3575,7 @@ def get_all_deadlines_unified() -> List[Dict[str, Any]]:
                 "status": calculate_status(deadline["date"], deadline.get("status")),
                 "isMajor": deadline.get("impact") == "high",
                 "source_url": None,
+                "relatedGuides": CATEGORY_RELATED_GUIDES.get(deadline.get("category")) or framework_guides,
                 **deadline,  # entry-level fields override framework-level defaults
             })
     
