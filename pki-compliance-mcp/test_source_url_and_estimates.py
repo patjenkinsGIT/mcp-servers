@@ -100,5 +100,15 @@ check("quarter/year precision handled", "quarter or year" in prompt)
 check("keeps do-not-hallucinate rule", "Do NOT hallucinate" in prompt)
 check("keeps human-review rule", "flag for human review" in prompt)
 
+print("== impact is prose, never a bare severity rating ==")
+# Bare high/medium/low used to render literally on the frontend as
+# "MAJOR IMPACT — high"; converted to prose 2026-07-20. isMajor must be
+# stored explicitly wherever impact no longer encodes it.
+unified = pki.get_all_deadlines_unified()
+bare = [d["id"] for d in unified if d.get("impact") in ("high", "medium", "low")]
+check("no deadline carries a bare severity word as impact", bare == [])
+check("isMajor always present and boolean",
+      all(isinstance(d.get("isMajor"), bool) for d in unified))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 raise SystemExit(1 if FAIL else 0)

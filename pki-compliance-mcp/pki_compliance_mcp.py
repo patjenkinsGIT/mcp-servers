@@ -1155,7 +1155,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2025-01-17",
                 "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554",
                 "category": "effective",
-                "impact": "high",
+                "impact": "All EU financial entities must comply with DORA's ICT risk management, incident reporting, and third-party risk requirements - no transitional period.",
+                "isMajor": True,
                 "description": "Regulation now applies to all EU financial entities. No transitional period."
             },
             {
@@ -1164,7 +1165,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2025-04-30",
                 "source_url": "https://www.eba.europa.eu/publications-and-media/press-releases/esas-provide-roadmap-towards-designation-ctpps-under-dora",
                 "category": "reporting",
-                "impact": "high",
+                "impact": "Financial entities must have their Registers of Information on ICT third-party arrangements complete and submitted through national competent authorities.",
+                "isMajor": True,
                 "description": "National competent authorities submit Registers of Information on ICT third-party arrangements to ESAs."
             },
             {
@@ -1173,7 +1175,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2025-07-31",
                 "source_url": "https://www.eba.europa.eu/publications-and-media/press-releases/esas-provide-roadmap-towards-designation-ctpps-under-dora",
                 "category": "oversight",
-                "impact": "high",
+                "impact": "Designated CTPPs come under direct ESA oversight; financial entities should verify which of their ICT providers are designated.",
+                "isMajor": True,
                 "description": "ESAs notify ICT third-party service providers of their classification as Critical Third-Party Providers."
             },
             {
@@ -1182,7 +1185,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-01-17",
                 "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554",
                 "category": "review",
-                "impact": "medium",
+                "impact": "No direct obligations - the Commission's Article 58 report may propose scope expansion, so watch for follow-on requirements.",
+                "isMajor": False,
                 "description": "European Commission reviews DORA implementation and submits report to Parliament on potential scope expansion (Article 58)."
             },
             {
@@ -1191,7 +1195,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-03-31",
                 "source_url": "https://eba.europa.eu/activities/direct-supervision-and-oversight/digital-operational-resilience-act/preparation-dora-application",
                 "category": "reporting",
-                "impact": "high",
+                "impact": "Annual RoI submission is now a recurring 31 March obligation; regulators expect more mature ICT third-party documentation than the first cycle.",
+                "isMajor": True,
                 "description": "Second annual Register of Information submission. From 2026 onwards, competent authorities submit RoIs to the ESAs by 31 March each year (per EBA DORA reporting FAQ). Regulators expect more mature submissions with detailed ICT third-party documentation."
             },
             {
@@ -1200,7 +1205,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-11-18",
                 "source_url": "https://www.eba.europa.eu/publications-and-media/press-releases/european-supervisory-authorities-designate-critical-ict-third-party-providers-under-digital",
                 "category": "requirements",
-                "impact": "medium",
+                "impact": "Financial entities using third-country CTPPs without an EU subsidiary must be prepared to exit those arrangements if the provider fails to establish one.",
+                "isMajor": False,
                 "description": "DORA Art. 31(12): financial entities may only use a third-country ICT provider designated as critical if it has established an EU subsidiary within 12 months of designation. The ESAs designated the first 19 CTPPs on 18 November 2025, so the window closes ~18 November 2026 (date derived from the 12-month statutory period). Most designated groups already operate EU subsidiaries; the practical exposure is for financial entities using third-country-established designees (e.g. Bloomberg L.P., FIS, IBM Corp., Kyndryl, NTT DATA, TCS, and UK-established Colt and LSEG entities) if any fail to maintain one.",
                 "is_estimated": True
             }
@@ -1223,7 +1229,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2024-10-17",
                 "source_url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj/eng",
                 "category": "effective",
-                "impact": "high",
+                "impact": "NIS2 obligations begin applying as member states transpose; entities in scope must track their national implementation timelines.",
+                "isMajor": True,
                 "description": "Member states required to transpose NIS2 into national law. 23 states missed deadline; EC opened infringement proceedings.",
                 "jurisdiction_detail": "EU"
             },
@@ -1233,7 +1240,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2025-12-06",
                 "source_url": "https://www.recht.bund.de/bgbl/1/2025/301/VO.html",
                 "category": "national",
-                "impact": "high",
+                "impact": "Entities in scope in Germany become subject to the amended BSI Act's registration, security, and reporting obligations.",
+                "isMajor": True,
                 "description": "German NIS2 implementation via amended BSI Act enters into force.",
                 "jurisdiction_detail": "Germany"
             },
@@ -1243,7 +1251,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-01-17",
                 "source_url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj/eng",
                 "category": "reporting",
-                "impact": "medium",
+                "impact": "Informational - the EU-CyCLONe report to Parliament carries no direct obligations for regulated entities.",
+                "isMajor": False,
                 "description": "European cyber crisis liaison network submits report to Parliament and Council.",
                 "jurisdiction_detail": "EU"
             },
@@ -1253,7 +1262,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-04-06",
                 "source_url": "https://www.bsi.bund.de/DE/Themen/Regulierte-Wirtschaft/NIS-2-regulierte-Unternehmen/NIS-2-Pflichten/nis-2-pflichten_node.html",
                 "category": "registration",
-                "impact": "high",
+                "impact": "In-scope entities must complete BSI registration; missing the three-month window is itself a violation.",
+                "isMajor": True,
                 "description": "Entities must register with Federal Office for Information Security (BSI) within 3 months of BSI Act entering force.",
                 "jurisdiction_detail": "Germany"
             },
@@ -1263,7 +1273,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-06-30",
                 "source_url": "https://www.acn.gov.it/portale/nis/categorizzazione",
                 "category": "audit",
-                "impact": "high",
+                "impact": "Italian in-scope entities must be able to demonstrate NIS2 compliance in the first audit cycle.",
+                "isMajor": True,
                 "description": "Deadline for first audit verifying NIS2 compliance (moved from Dec 31, 2025).",
                 "jurisdiction_detail": "Italy"
             },
@@ -1273,7 +1284,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-07-10",
                 "source_url": "https://legilux.public.lu/eli/etat/leg/loi/2026/05/05/a225/jo",
                 "category": "registration",
-                "impact": "high",
+                "impact": "In-scope Luxembourg entities must self-register with the ILR; non-registration is itself a sanctionable breach.",
+                "isMajor": True,
                 "description": "Entities in scope of Luxembourg's NIS2 law (in force 10 May 2026) must self-register with the ILR by 10 July 2026 (Article 11). Non-registration is itself a sanctionable breach.",
                 "jurisdiction_detail": "Luxembourg"
             },
@@ -1283,7 +1295,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-10-01",
                 "source_url": "https://www.ris.bka.gv.at/Dokumente/Bundesnormen/NOR40273912/NOR40273912.html",
                 "category": "effective",
-                "impact": "high",
+                "impact": "Austrian in-scope entities must fully comply with the Network and Information System Security Act 2026, including security measures and reporting duties.",
+                "isMajor": True,
                 "description": "Network and Information System Security Act 2026 fully applicable.",
                 "jurisdiction_detail": "Austria"
             },
@@ -1293,7 +1306,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-10-31",
                 "source_url": "https://www.acn.gov.it/portale/en/nis/modalita-specifiche-base",
                 "category": "requirements",
-                "impact": "high",
+                "impact": "Italian in-scope entities must implement the minimum security requirements from the ACN technical annexes by this date.",
+                "isMajor": True,
                 "description": "ACN technical annexes establishing minimum security requirements become effective (ACN states October 2026; 18 months from April 2025 list consolidation).",
                 "jurisdiction_detail": "Italy",
                 "is_estimated": True
@@ -1304,7 +1318,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2027-07-17",
                 "source_url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj/eng",
                 "category": "reporting",
-                "impact": "medium",
+                "impact": "Informational - recurring EU-CyCLONe reporting cycle with no direct obligations for regulated entities.",
+                "isMajor": False,
                 "description": "Next 18-month cycle report from cyber crisis liaison network.",
                 "jurisdiction_detail": "EU"
             }
@@ -1327,7 +1342,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2025-11-12",
                 "source_url": "https://bills.parliament.uk/bills/4035",
                 "category": "legislative",
-                "impact": "low",
+                "impact": "No obligations yet - legislative milestone only; organizations likely in scope should begin tracking the bill.",
+                "isMajor": False,
                 "description": "Cyber Security and Resilience (Network and Information Systems) Bill introduced to House of Commons."
             },
             {
@@ -1336,7 +1352,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-01-06",
                 "source_url": "https://bills.parliament.uk/bills/4035",
                 "category": "legislative",
-                "impact": "low",
+                "impact": "No obligations yet - legislative milestone only.",
+                "isMajor": False,
                 "description": "Bill passed second reading in House of Commons."
             },
             {
@@ -1345,7 +1362,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-02-03",
                 "source_url": "https://bills.parliament.uk/bills/4035",
                 "category": "legislative",
-                "impact": "low",
+                "impact": "No obligations yet - committee scrutiny may amend the bill's scope and duties.",
+                "isMajor": False,
                 "description": "Public Bill Committee begins line-by-line scrutiny. Oral evidence sessions."
             },
             {
@@ -1354,7 +1372,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-03-05",
                 "source_url": "https://bills.parliament.uk/bills/4035",
                 "category": "legislative",
-                "impact": "medium",
+                "impact": "Committee amendments settle the bill's shape - a good point to reassess whether your organization falls in scope.",
+                "isMajor": False,
                 "description": "Public Bill Committee expected to report by 5:00pm."
             },
             {
@@ -1363,7 +1382,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-06-17",
                 "source_url": "https://bills.parliament.uk/bills/4035",
                 "category": "legislative",
-                "impact": "low",
+                "impact": "No obligations yet - legislative milestone only; Royal Assent moves closer.",
+                "isMajor": False,
                 "description": "Bill passed the House of Commons (third reading 16 Jun 2026) and had its first reading in the House of Lords on 17 June 2026. Lords second reading scheduled 14 July 2026."
             },
             {
@@ -1372,7 +1392,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-12-31",
                 "source_url": "https://bills.parliament.uk/bills/4035",
                 "category": "legislative",
-                "impact": "high",
+                "impact": "Once the bill becomes law, secondary legislation and enforcement timelines start; in-scope organizations should begin gap assessments.",
+                "isMajor": True,
                 "description": "Bill was carried over and reintroduced May 2026; passed Commons third reading 16 Jun 2026; Lords second reading scheduled 14 Jul 2026. Royal Assent now expected late 2026.",
                 "is_estimated": True
             },
@@ -1382,7 +1403,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2027-12-31",
                 "source_url": "https://www.gov.uk/government/publications/cyber-security-and-resilience-network-and-information-systems-bill-factsheets",
                 "category": "implementation",
-                "impact": "high",
+                "impact": "Phased duties begin landing via secondary legislation; UK critical infrastructure operators and digital/managed service providers should be ready to comply as requirements are laid.",
+                "isMajor": True,
                 "description": "Phased implementation via secondary legislation expected during 2027, following Royal Assent. Detailed requirements to follow.",
                 "is_estimated": True
             }
@@ -1429,7 +1451,8 @@ REGULATORY_FRAMEWORKS = [
                 "date": "2026-06-12",
                 "source_url": "https://www.whitehouse.gov/presidential-actions/2026/06/national-security-presidential-memorandum-nspm-12/",
                 "category": "regulatory",
-                "impact": "medium",
+                "impact": "Governance change for National Security Systems - no new certificate requirements; CNSA and CNSSP 15 cryptographic requirements continue unchanged.",
+                "isMajor": False,
                 "description": "NSPM-12 (signed June 12, 2026) rescinds NSD-42 (1990) and NSM-8 (2022), re-establishes the Committee on National Security Systems (CNSS) with binding directive authority, and designates the Director of NSA as National Manager for National Security Systems. Cryptographic requirements for NSS continue to flow through CNSSP 15, the policy vehicle for CNSA."
             }
         ]
