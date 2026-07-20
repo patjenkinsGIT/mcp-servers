@@ -61,6 +61,31 @@ for did in ("validity-200-days", "validity-100-days", "validity-47-days", "short
         [g["url"] for g in by_id[did]["relatedGuides"]] == ["/guides/47-day-certificate-timeline"],
     )
 
+print("== new category defaults and id overrides ==")
+check(
+    "governance category gets CPS guide",
+    [g["url"] for g in by_id["chrome-cpcps-attestation-required"]["relatedGuides"]] == ["/guides/what-is-a-cps"],
+)
+check(
+    "algorithm-deprecation gets Hash Functions + RSA vs ECC",
+    [g["url"] for g in by_id["sc097-sha1-ca-crl-sunset"]["relatedGuides"]]
+    == ["/guides/hash-functions", "/guides/rsa-vs-ecc"],
+)
+check(
+    "csc32 override gets Code Signing",
+    [g["url"] for g in by_id["cabf-csc32-reserved-policy-oid"]["relatedGuides"]] == ["/guides/code-signing"],
+)
+check(
+    "mozilla mrsp entry gets MRSP + CPS guides (override beats governance default)",
+    [g["url"] for g in by_id["mozilla-mrsp-3-1-effective"]["relatedGuides"]]
+    == ["/compliance/mozilla-root-store-policy-v3-1", "/guides/what-is-a-cps"],
+)
+check(
+    "framework deadline id override works (nspm-12 -> CNSA guide)",
+    [g["url"] for g in by_id["nspm-12-cnss-governance"]["relatedGuides"]]
+    == ["/guides/cnsa-2-certificate-management"],
+)
+
 print("== framework-guide fallback ==")
 check(
     "framework deadline inherits framework guide",

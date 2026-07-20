@@ -1076,28 +1076,61 @@ CATEGORY_RELATED_GUIDES = {
     "revocation": [
         {"title": "Revocation", "url": "/guides/revocation", "hasVideo": False},
     ],
+    "governance": [
+        {"title": "What is a CPS?", "url": "/guides/what-is-a-cps", "hasVideo": False},
+    ],
+    "algorithm-deprecation": [
+        {"title": "Hash Functions", "url": "/guides/hash-functions", "hasVideo": False},
+        {"title": "RSA vs ECC", "url": "/guides/rsa-vs-ecc", "hasVideo": False},
+    ],
 }
 
-# Explicit override shared by the validity-reduction entries (category
-# "certificates" has no default, see above).
 _VALIDITY_TIMELINE_GUIDES = [
     {"title": "47-Day Certificate Timeline", "url": "/guides/47-day-certificate-timeline", "hasVideo": True},
 ]
 
-_VALIDITY_TIMELINE_DEADLINE_IDS = {
-    "validity-200-days",
-    "validity-100-days",
-    "validity-47-days",
-    "short-lived-cert-threshold-7-days",
+_MOZILLA_MRSP_GUIDE = {
+    "title": "Mozilla Root Store Policy v3.1",
+    "url": "/compliance/mozilla-root-store-policy-v3-1",
+    "hasVideo": False,
 }
 
-for _entry in DEADLINES:
-    if _entry["id"] in _VALIDITY_TIMELINE_DEADLINE_IDS:
-        _entry["relatedGuides"] = _VALIDITY_TIMELINE_GUIDES
+# Per-deadline overrides by id, consulted before the category map in
+# get_all_deadlines_unified(). Works for both DEADLINES entries and
+# framework deadlines. Use when the category default is absent (the
+# heterogeneous "certificates" category) or topically wrong for one entry.
+EXPLICIT_RELATED_GUIDES = {
+    # Validity-reduction entries (category "certificates" has no default)
+    "validity-200-days": _VALIDITY_TIMELINE_GUIDES,
+    "validity-100-days": _VALIDITY_TIMELINE_GUIDES,
+    "validity-47-days": _VALIDITY_TIMELINE_GUIDES,
+    "short-lived-cert-threshold-7-days": _VALIDITY_TIMELINE_GUIDES,
     # Categorized root-store (it's a Chrome Root Program change) but the
     # topic is ClientAuth EKU — the EKU guides fit better than Root Stores.
-    elif _entry["id"] == "chrome-clientauth-leaf-sunset":
-        _entry["relatedGuides"] = CATEGORY_RELATED_GUIDES["eku"]
+    "chrome-clientauth-leaf-sunset": CATEGORY_RELATED_GUIDES["eku"],
+    # Code-signing policy OIDs — the keyword heuristic was picking
+    # lifecycle guides for this one.
+    "cabf-csc32-reserved-policy-oid": [
+        {"title": "Code Signing", "url": "/guides/code-signing", "hasVideo": True},
+    ],
+    # Mozilla policy deadlines get the dedicated MRSP v3.1 guide (which
+    # covers the DCR requirement) on top of / instead of the governance
+    # default.
+    "mozilla-mrsp-3-1-effective": [
+        _MOZILLA_MRSP_GUIDE,
+        {"title": "What is a CPS?", "url": "/guides/what-is-a-cps", "hasVideo": False},
+    ],
+    "mozilla-cpcps-content-compliance-deadline": [
+        _MOZILLA_MRSP_GUIDE,
+        {"title": "What is a CPS?", "url": "/guides/what-is-a-cps", "hasVideo": False},
+    ],
+    "mozilla-dcr-audit-periods": [_MOZILLA_MRSP_GUIDE],
+    # NSA framework deadline; the nsa resource_link is external, so no
+    # framework fallback fires.
+    "nspm-12-cnss-governance": [
+        {"title": "CNSA 2.0 Certificate Management", "url": "/guides/cnsa-2-certificate-management", "hasVideo": False},
+    ],
+}
 
 # =============================================================================
 # REGULATORY FRAMEWORKS - DORA, NIS2, UK CSR Bill
@@ -3555,7 +3588,8 @@ def get_all_deadlines_unified() -> List[Dict[str, Any]]:
         }
         if "relatedGuides" not in entry:
             entry["relatedGuides"] = (
-                CATEGORY_RELATED_GUIDES.get(entry.get("category"))
+                EXPLICIT_RELATED_GUIDES.get(entry["id"])
+                or CATEGORY_RELATED_GUIDES.get(entry.get("category"))
                 or framework_guides_by_id.get(entry.get("framework_id"))
                 or []
             )
@@ -3575,7 +3609,11 @@ def get_all_deadlines_unified() -> List[Dict[str, Any]]:
                 "status": calculate_status(deadline["date"], deadline.get("status")),
                 "isMajor": deadline.get("impact") == "high",
                 "source_url": None,
-                "relatedGuides": CATEGORY_RELATED_GUIDES.get(deadline.get("category")) or framework_guides,
+                "relatedGuides": (
+                    EXPLICIT_RELATED_GUIDES.get(deadline["id"])
+                    or CATEGORY_RELATED_GUIDES.get(deadline.get("category"))
+                    or framework_guides
+                ),
                 **deadline,  # entry-level fields override framework-level defaults
             })
     
