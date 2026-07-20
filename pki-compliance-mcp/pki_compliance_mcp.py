@@ -1132,6 +1132,18 @@ EXPLICIT_RELATED_GUIDES = {
     "nspm-12-cnss-governance": [
         {"title": "CNSA 2.0 Certificate Management", "url": "/guides/cnsa-2-certificate-management", "hasVideo": False},
     ],
+    # Entrust distrust deadlines — same Root Stores guide the DigiCert
+    # distrust cards use (category "certificates" has no default).
+    "chrome-entrust-distrust": CATEGORY_RELATED_GUIDES["root-store"],
+    "apple-entrust-distrust": CATEGORY_RELATED_GUIDES["root-store"],
+    "mozilla-entrust-distrust": CATEGORY_RELATED_GUIDES["root-store"],
+    "microsoft-entrust-distrust": CATEGORY_RELATED_GUIDES["root-store"],
+    # Code-signing validity reduction.
+    "code-signing-validity-460": [
+        {"title": "Code Signing", "url": "/guides/code-signing", "hasVideo": True},
+    ],
+    # Precertificate Signing CA sunset — a CT ecosystem change.
+    "sc092-precert-signing-ca-sunset": CATEGORY_RELATED_GUIDES["certificate-transparency"],
 }
 
 # =============================================================================

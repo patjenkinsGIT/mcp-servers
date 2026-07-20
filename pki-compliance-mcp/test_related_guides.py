@@ -51,7 +51,7 @@ check(
 )
 check(
     "unmapped 'certificates' category stays empty",
-    by_id["chrome-entrust-distrust"]["relatedGuides"] == [],
+    by_id["pre-issuance-linting"]["relatedGuides"] == [],
 )
 
 print("== per-entry overrides ==")
@@ -86,6 +86,22 @@ check(
     == ["/guides/cnsa-2-certificate-management"],
 )
 
+print("== entrust distrust + cabf overrides (empty 'certificates' -> explicit) ==")
+for did in ("chrome-entrust-distrust", "apple-entrust-distrust",
+            "mozilla-entrust-distrust", "microsoft-entrust-distrust"):
+    check(
+        f"{did} gets Root Stores guide",
+        [g["url"] for g in by_id[did]["relatedGuides"]] == ["/guides/root-stores"],
+    )
+check(
+    "code-signing-validity-460 gets Code Signing guide",
+    [g["url"] for g in by_id["code-signing-validity-460"]["relatedGuides"]] == ["/guides/code-signing"],
+)
+check(
+    "sc092-precert-signing-ca-sunset gets CT guide",
+    [g["url"] for g in by_id["sc092-precert-signing-ca-sunset"]["relatedGuides"]] == ["/guides/certificate-transparency"],
+)
+
 print("== framework-guide fallback ==")
 check(
     "framework deadline inherits framework guide",
@@ -97,8 +113,8 @@ check(
 )
 check(
     "external resource_link (cabforum.org) lends no guide",
-    by_id["chrome-entrust-distrust"]["framework_id"] == "cabforum"
-    and by_id["chrome-entrust-distrust"]["relatedGuides"] == [],
+    by_id["pre-issuance-linting"]["framework_id"] == "cabforum"
+    and by_id["pre-issuance-linting"]["relatedGuides"] == [],
 )
 
 print("== serialization ==")
