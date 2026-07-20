@@ -8,6 +8,7 @@ Transport: stdio (local only)
 Storage: JSON files in ~/.fixmycert-yt/
 """
 
+import hashlib
 import json
 import os
 import shutil
@@ -152,6 +153,33 @@ def _write_json(filepath: Path, data: list | dict) -> None:
 def _now_iso() -> str:
     """Current UTC timestamp as ISO string."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def _desc_hash(desc: str) -> str:
+    """Short stable hash of a description, for staged-edit detection."""
+    return hashlib.sha256((desc or "").encode("utf-8")).hexdigest()[:16]
+
+
+def _mark_description_synced(video: dict) -> None:
+    """Record that the local description matches YouTube (or was just pushed)."""
+    video["description_synced_hash"] = _desc_hash(video.get("description") or "")
+    video["description_synced_at"] = _now_iso()
+
+
+def _description_is_dirty(video: dict) -> bool:
+    """True if the local description was edited since the last sync/push.
+
+    A dirty description is staged locally (via yt_update_video) but not yet
+    pushed with yt_update_description — sync/refresh must not overwrite it.
+    Records with no sync hash yet (pre-existing data) are treated as clean.
+    """
+    local = video.get("description") or ""
+    if not local.strip():
+        return False
+    stored = video.get("description_synced_hash")
+    if stored is None:
+        return False
+    return _desc_hash(local) != stored
 
 
 # ============================================================
@@ -1903,6 +1931,7 @@ async def yt_sync_from_youtube(params: SyncInput) -> str:
 
     new_videos = []
     updated_videos = []
+    skipped_dirty = []
     unchanged = 0
 
     for vid in video_ids:
@@ -1935,6 +1964,21 @@ async def yt_sync_from_youtube(params: SyncInput) -> str:
             # Store current description from YouTube for comparison
             local["yt_description"] = yt_description
 
+            # Persist YouTube's description into the tracker's source-of-truth
+            # field — unless a local edit is staged and not yet pushed
+            local_desc = local.get("description") or ""
+            if yt_description != local_desc:
+                if _description_is_dirty(local):
+                    skipped_dirty.append(local.get("title") or yt_title)
+                else:
+                    changes.append(
+                        f"description updated: {len(local_desc)} → {len(yt_description)} chars"
+                    )
+                    local["description"] = yt_description
+                    _mark_description_synced(local)
+            else:
+                _mark_description_synced(local)
+
             # Update stats
             local["stats"] = {
                 "views": yt_views,
@@ -1959,8 +2003,10 @@ async def yt_sync_from_youtube(params: SyncInput) -> str:
                 "category": None,
                 "tags": [],
                 "related_videos": [],
-                "description": None,
+                "description": yt_description,
                 "yt_description": yt_description,
+                "description_synced_hash": _desc_hash(yt_description),
+                "description_synced_at": _now_iso(),
                 "pinned_comment": None,
                 "thumbnail_type": None,
                 "ab_test": {"status": "none", "element": None, "start_date": None, "end_date": None, "result": None},
@@ -1999,6 +2045,12 @@ async def yt_sync_from_youtube(params: SyncInput) -> str:
         lines.append(f"\n## ✏️ Updated ({len(updated_videos)})\n")
         for uv in updated_videos:
             lines.append(f"- **{uv['title']}**: {', '.join(uv['changes'])}")
+
+    if skipped_dirty:
+        lines.append(f"\n## ⏸️ Description Overwrite Skipped ({len(skipped_dirty)})\n")
+        for t in skipped_dirty:
+            lines.append(f"- **{t}** — local description has staged (unpushed) edits")
+        lines.append("\n💡 Push them live with `yt_update_description` (mode='full').")
 
     if unchanged:
         lines.append(f"\n✅ {unchanged} videos unchanged")
@@ -2052,10 +2104,22 @@ async def yt_refresh_video(params: RefreshVideoInput) -> str:
         video["title"] = yt_title
 
     yt_desc = snippet.get("description", "")
-    old_yt_desc = video.get("yt_description", "")
-    if yt_desc != old_yt_desc:
-        changes.append("YouTube description changed")
     video["yt_description"] = yt_desc
+
+    local_desc = video.get("description") or ""
+    if yt_desc != local_desc:
+        if _description_is_dirty(video):
+            changes.append(
+                f"description NOT overwritten: local copy has staged (unpushed) edits "
+                f"— push with yt_update_description or they'll stay local"
+            )
+        else:
+            changes.append(f"description updated: {len(local_desc)} → {len(yt_desc)} chars")
+            video["description"] = yt_desc
+            _mark_description_synced(video)
+    else:
+        # Local already matches YouTube — record that so future edits are detectable
+        _mark_description_synced(video)
 
     video["stats"] = {
         "views": int(stats.get("viewCount", 0)),
@@ -2142,6 +2206,8 @@ async def yt_check_descriptions(params: DashboardInput) -> str:
             })
         else:
             matched += 1
+            if (v.get("description") or "").strip() == yt_desc.strip():
+                _mark_description_synced(v)
 
         # Always update the yt_description field
         v["yt_description"] = yt_desc
@@ -3019,6 +3085,7 @@ async def yt_update_description(params: UpdateDescriptionInput) -> str:
     # Update local records
     video["description"] = updated_desc
     video["yt_description"] = updated_desc
+    _mark_description_synced(video)
     video["updated_at"] = _now_iso()
     _write_json(VIDEOS_FILE, videos)
 
@@ -3211,6 +3278,7 @@ async def yt_push_all_crosslinks(params: PushAllCrosslinksInput) -> str:
         if local_video:
             local_video["description"] = updated_desc
             local_video["yt_description"] = updated_desc
+            _mark_description_synced(local_video)
             local_video["updated_at"] = _now_iso()
             # Add to related_videos list
             for link in update["links"]:
@@ -3520,6 +3588,7 @@ async def yt_bulk_update_descriptions(params: BulkUpdateDescriptionsInput) -> st
         # Update local records
         v["description"] = updated_desc
         v["yt_description"] = updated_desc
+        _mark_description_synced(v)
         v["updated_at"] = _now_iso()
         results.append({"title": v["title"], "chars": len(updated_desc), "changed": True})
 
