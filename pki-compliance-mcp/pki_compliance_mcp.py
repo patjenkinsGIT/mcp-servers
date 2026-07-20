@@ -17,6 +17,8 @@ Usage:
 import json
 import hashlib
 import re
+import csv
+import io
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
@@ -3537,6 +3539,72 @@ def days_until(date_str: str) -> int:
     return (target - now).days
 
 
+# Stable column order for the deadlines CSV export. Nested feed fields are
+# flattened: relatedGuides -> "; "-joined URLs, consequences -> two columns.
+DEADLINE_CSV_COLUMNS = [
+    "date", "days_until", "status", "title", "source", "framework_name",
+    "category", "jurisdiction", "is_major", "is_estimated", "impact",
+    "description", "source_url", "related_guides", "note",
+    "consequence_enforcement", "consequence_scenario",
+]
+
+
+def build_deadlines_csv(
+    category: Optional[str] = None,
+    framework: Optional[str] = None,
+    jurisdiction: Optional[str] = None,
+    status: Optional[str] = None,
+    within_days: Optional[int] = None,
+) -> str:
+    """Render unified deadlines as CSV text (header + rows, sorted by date).
+
+    Applies the same filters as get_deadlines(). Uses the csv module so
+    commas/quotes/newlines in descriptions are correctly escaped. Returns a
+    str; the HTTP layer encodes it utf-8-sig so Excel renders accented and
+    em-dash characters. Column order is DEADLINE_CSV_COLUMNS.
+    """
+    rows = []
+    for d in get_all_deadlines_unified():
+        if category and d.get("category") != category:
+            continue
+        if framework and d.get("framework_id") != framework:
+            continue
+        if jurisdiction and d.get("jurisdiction") != jurisdiction:
+            continue
+        if status and d.get("status") != status:
+            continue
+        days = days_until(d["date"])
+        if within_days is not None and days > within_days:
+            continue
+        cons = d.get("consequences") or {}
+        rows.append({
+            "date": d["date"],
+            "days_until": days,
+            "status": d.get("status", ""),
+            "title": d.get("title", ""),
+            "source": d.get("source", ""),
+            "framework_name": d.get("framework_name", ""),
+            "category": d.get("category", ""),
+            "jurisdiction": d.get("jurisdiction", ""),
+            "is_major": "true" if d.get("isMajor") else "false",
+            "is_estimated": "true" if d.get("is_estimated") else "false",
+            "impact": d.get("impact", ""),
+            "description": d.get("description", ""),
+            "source_url": d.get("source_url") or "",
+            "related_guides": "; ".join(g.get("url", "") for g in d.get("relatedGuides", [])),
+            "note": d.get("note", ""),
+            "consequence_enforcement": cons.get("enforcement", ""),
+            "consequence_scenario": cons.get("scenario", ""),
+        })
+    rows.sort(key=lambda r: r["date"])
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=DEADLINE_CSV_COLUMNS, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    return buf.getvalue()
+
+
 def calculate_status(date_str: str, current_status: Optional[str] = None) -> str:
     """Calculate deadline status based on date.
     
@@ -4477,6 +4545,7 @@ def create_http_app():
                         "/deadlines", "/frameworks", "/frameworks/{id}",
                         "/api/compliance/deadlines", "/api/compliance/upcoming",
                         "/api/compliance/frameworks", "/api/compliance/frameworks/{id}",
+                        "/api/compliance/deadlines.csv",
                         "/api/compliance-data", "/api/news", "/api/news/sources", "/api/news/refresh"
                     ]
                 }).encode())
@@ -4724,6 +4793,28 @@ li.review::before{{background:#fbbf24}}
                 self.send_header("Cache-Control", "public, max-age=3600")  # Cache for 1 hour
                 self.end_headers()
                 self.wfile.write(json.dumps(response_data, indent=2).encode())
+                return
+
+            # CSV export of deadlines. Same filters as /api/compliance/deadlines
+            # (category, framework, jurisdiction, status, within_days); a plain
+            # <a href download> in the frontend hits this. utf-8-sig BOM so Excel
+            # renders accented / em-dash characters.
+            if path == "/api/compliance/deadlines.csv":
+                within_days = params.get("within_days", [None])[0]
+                csv_text = build_deadlines_csv(
+                    category=params.get("category", [None])[0],
+                    framework=params.get("framework", [None])[0],
+                    jurisdiction=params.get("jurisdiction", [None])[0],
+                    status=params.get("status", [None])[0],
+                    within_days=int(within_days) if within_days else None,
+                )
+                filename = f"pki-compliance-deadlines-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.csv"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(csv_text.encode("utf-8-sig"))
                 return
 
             # Run async handlers synchronously

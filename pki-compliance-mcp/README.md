@@ -169,6 +169,7 @@ Data-only changes here flow to the site automatically (after cache expiry). Fron
 |----------|---------|
 | `/api/compliance-data` | Everything in one call (front-end) — deadlines, documents, root stores, frameworks |
 | `/deadlines`, `/api/compliance/deadlines` | Filterable deadlines (category, framework, jurisdiction, status, within_days) |
+| `/api/compliance/deadlines.csv` | Same filters, CSV download (`build_deadlines_csv`, utf-8-sig BOM, `Content-Disposition: attachment`). Front-end "Export CSV" links here with the active filters as query params. Columns: `DEADLINE_CSV_COLUMNS`. Tests: `test_deadlines_csv.py`. |
 | `/api/compliance/upcoming` | Upcoming deadlines within N days |
 | `/frameworks`, `/api/compliance/frameworks` | Regulatory framework list |
 | `/status`, `/feeds`, `/documents` | Monitor status, feed checks, document versions |
