@@ -73,6 +73,16 @@ FEEDS = {
         "type": "rss",
         "priority": "medium",
     },
+    "microsoft_root_program": {
+        # Official source of truth since Oct 2025 (repo README supersedes the
+        # learn.microsoft.com pages, which now carry a "superceded" notice).
+        # GitHub's commits.atom covers every requirement/release-note change,
+        # replacing the old high-priority manual monthly check.
+        "name": "Microsoft Trusted Root Program (GitHub commits)",
+        "url": "https://github.com/TrustedRootProgram/Program-Requirements/commits.atom",
+        "type": "atom",
+        "priority": "high",
+    },
 }
 
 DOCUMENTS = {
@@ -105,8 +115,14 @@ DOCUMENTS = {
         "priority": "medium",
     },
     "microsoft_root_program": {
+        # Repointed 2026-07-21: the docs.microsoft.com page was superseded in
+        # Oct 2025 by the GitHub repo and went stale (we watched a dead page
+        # for ~9 months). Primary watch is now the commits.atom feed in FEEDS;
+        # this hash of the raw requirements markdown is a backstop — raw
+        # markdown has no dynamic page chrome, so hashing is reliable.
         "name": "Microsoft Trusted Root Program",
-        "url": "https://docs.microsoft.com/en-us/security/trusted-root/program-requirements",
+        "url": "https://github.com/TrustedRootProgram/Program-Requirements",
+        "check_url": "https://raw.githubusercontent.com/TrustedRootProgram/Program-Requirements/main/Requirements.md",
         "priority": "medium",
     },
     "nist_800_131a": {
@@ -122,17 +138,10 @@ DOCUMENTS = {
 }
 
 # Sources that don't have RSS feeds and require manual checking
-# The /feeds endpoint will remind users to check these manually
-MANUAL_CHECK_REQUIRED = [
-    {
-        "id": "microsoft_trusted_root_releases",
-        "name": "Microsoft Trusted Root Program Release Notes",
-        "url": "https://learn.microsoft.com/en-us/security/trusted-root/release-notes",
-        "description": "Monthly CTL updates and CA additions/removals. No RSS available.",
-        "check_frequency": "Monthly",
-        "priority": "high",
-    },
-]
+# The /feeds endpoint will remind users to check these manually.
+# Empty since 2026-07-21: the Microsoft release-notes entry (last holdout)
+# moved to FEEDS as the Program-Requirements repo commits.atom feed.
+MANUAL_CHECK_REQUIRED = []
 
 # =============================================================================
 # COMPLIANCE DATA - This is the single source of truth
@@ -1606,7 +1615,7 @@ ROOT_STORES = [
         "id": "microsoft",
         "name": "Microsoft Trusted Root Program",
         "version": "2024",
-        "url": "https://learn.microsoft.com/en-us/security/trusted-root/program-requirements",
+        "url": "https://github.com/TrustedRootProgram/Program-Requirements",
         "platforms": ["Windows", "Edge (legacy)", "Internet Explorer"],
         "keyRequirements": [
             "Broader root store (~400+ roots)",
@@ -2282,8 +2291,8 @@ RELATED_RFCS = [
 
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
-    "lastUpdated": "2026-07-13",
-    "dataVersion": "2.4.5",
+    "lastUpdated": "2026-07-21",
+    "dataVersion": "2.4.6",
     "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
@@ -2291,6 +2300,7 @@ COMPLIANCE_METADATA = {
         "https://g.co/chrome/root-policy",
         "https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/policy/",
         "https://github.com/apple/apple-root-program",
+        "https://github.com/TrustedRootProgram/Program-Requirements",
         "https://aka.ms/RootCert",
         "https://letsencrypt.org/certificates/",
         "https://www.sectigo.com/knowledge-base/detail/Sectigo-Root-Certificates",
@@ -2301,12 +2311,12 @@ COMPLIANCE_METADATA = {
 }
 
 DATA_FRESHNESS = {
-    "lastFullReview": "2026-07-13",
-    "nextReviewDue": "2026-08-12",
+    "lastFullReview": "2026-07-21",
+    "nextReviewDue": "2026-08-20",
     "reviewIntervalDays": 30,
     "fieldVerifications": {
         "deadlines": {"verified": "2026-07-13", "source": "2026-07-13 review: CSC-32 reserved policy OID (2026-09-15) verified against CS BR v3.11.0 §7.1.6.4 and ballot post; DigiCert G1 Chrome+Mozilla full distrust (2026-04-15) verified against DigiCert alerts; DORA Art. 31(12) CTPP EU-subsidiary window (~2026-11-18, estimated) verified against EBA/ESMA announcements and regulation text. Ten stale review flags cleared. SC0101v2 (IPR ~Aug 6) and SMC017v2 (IPR ~Jul 30) remain held. Prior review 2026-07-10"},
-        "rootStores": {"verified": "2026-05-14", "source": "Individual root program policies"},
+        "rootStores": {"verified": "2026-07-21", "source": "Individual root program policies. 2026-07-21: Microsoft source repointed to github.com/TrustedRootProgram/Program-Requirements (official since Oct 2025; superseded learn.microsoft.com page was monitored dead ~9 months) and converted from manual check to commits.atom feed."},
         "algorithmRequirements": {"verified": "2026-05-14", "source": "CA/B Forum TLS BR 2.2.6, NIST FIPS 203/204/205, NIST SP 800-131A Rev 3"},
         "caChains": {"verified": "2026-05-14", "source": "Official CA documentation"},
         "pqcStandards": {"verified": "2026-05-14", "source": "NIST FIPS 203/204/205, NSA CNSA 2.0"}
@@ -3510,11 +3520,51 @@ _HASH_NOISE_PATTERNS = [
     re.compile(r'data-cfemail="[0-9a-f]+"'),
 ]
 
+# learn.microsoft.com page chrome that re-renders per request (false positive
+# on microsoft_root_program 2026-07-21): the "AI Summary" block regenerates,
+# and the "Additional resources"/Events right-rail rotates its events daily.
+# Any Learn page we track carries both. Each entry names the element tag and
+# a pattern for its opening tag; the region through the balanced closing tag
+# is removed — these blocks nest same-name tags, so a lazy regex would stop
+# at the first inner close tag and leave the dynamic tail in the hash.
+_HASH_NOISE_BLOCKS = [
+    ("div", re.compile(r'<div\b[^>]*\bdata-id="ai-summary"[^>]*>', re.IGNORECASE)),
+    ("div", re.compile(r'<div\b[^>]*\bid="ms--ai-summary-header"[^>]*>', re.IGNORECASE)),
+    ("div", re.compile(r'<div\b[^>]*\bid="ms--additional-resources(?:-mobile)?"[^>]*>', re.IGNORECASE)),
+    ("section", re.compile(
+        r'<section\b[^>]*\bdata-bi-name="(?:events-card|recommendations|learning-resource-card)"[^>]*>',
+        re.IGNORECASE)),
+]
+
+
+def _strip_balanced_blocks(content: str, tag: str, start_pat: "re.Pattern") -> str:
+    """Remove every region from a start_pat match through its balanced </tag>.
+
+    If the markup is unbalanced (no matching close tag), only the opening tag
+    is dropped so the scan always terminates.
+    """
+    tag_pat = re.compile(rf"<(/?){tag}\b[^>]*>", re.IGNORECASE)
+    while True:
+        m = start_pat.search(content)
+        if not m:
+            return content
+        depth, cut_end = 1, m.end()
+        for t in tag_pat.finditer(content, m.end()):
+            depth += -1 if t.group(1) else 1
+            if depth == 0:
+                cut_end = t.end()
+                break
+        content = content[:m.start()] + content[cut_end:]
+
 
 def hash_content(content: str) -> str:
     """Generate SHA-256 hash of content, ignoring per-request dynamic noise."""
+    # Scripts first: script bodies may contain literal tag text that would
+    # otherwise confuse the balanced-block scan.
     for pat in _HASH_NOISE_PATTERNS:
         content = pat.sub("", content)
+    for tag, start_pat in _HASH_NOISE_BLOCKS:
+        content = _strip_balanced_blocks(content, tag, start_pat)
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 def parse_feed(content: str) -> List[Dict[str, Any]]:

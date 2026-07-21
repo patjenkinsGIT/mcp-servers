@@ -15,6 +15,7 @@ Runs on the DigitalOcean droplet at `/opt/mcp-servers/pki-compliance-mcp`, serve
 | `daily_email.py` | Morning summary email via Resend. |
 | `deploy.sh` | Pull + pip install + restart the systemd service (run on the droplet). |
 | `test_gating_dedup.py` | Offline tests for the cost gate and dedup logic. |
+| `test_hash_sanitizer.py` | Offline regression tests for the document-hash sanitizer (learn.microsoft.com AI Summary / Events widget churn; fixtures in `fixtures/`). |
 | `test_source_url_and_estimates.py` | Offline tests for API serialization (`source_url`, `is_estimated`), status/date consistency, and prompt guarantees. |
 
 ## Data model
@@ -127,6 +128,7 @@ python3 test_gating_dedup.py
 python3 test_source_url_and_estimates.py
 python3 test_auto_approve.py
 python3 test_content_drafts.py
+python3 test_hash_sanitizer.py
 ```
 
 Requires `httpx`, `pydantic`, `feedparser` importable (the `mcp` package is optional). Both suites must pass before deploying. `test_source_url_and_estimates.py` also catches stale hardcoded statuses and regressions in the research-prompt guarantees.
