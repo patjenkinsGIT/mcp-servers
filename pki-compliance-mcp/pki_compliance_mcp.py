@@ -762,7 +762,7 @@ DEADLINES = [
         "id": "microsoft-april-2026-ctl-notbefore",
         "date": "2026-05-19",
         "title": "Microsoft NotBefore distrust: SwissSign Silver G2, SecureSign RootCA11/CA12, ANCERT (new issuance)",
-        "description": "April 2026 CTL release (published Apr 28, 2026). Certificates issued after May 19, 2026 are no longer trusted on Windows for: SwissSign Silver CA - G2, Cybertrust Japan SecureSign RootCA11 and CA12, two ANCERT roots, and Byte Root CA (full distrust); plus S/MIME-only NotBefore for 19 roots including legacy GoDaddy Class 2/gdroot-g2/sfroot-g2, HARICA 2015 RSA/ECC, CFCA EV, Camerfirma, and Firmaprofesional. Camerfirma CommerceRoot and Nets DanID OCES were disabled outright. Certificates issued before the date remain trusted.",
+        "description": "Existing certificates keep working — renewals break. Certificates issued after May 19, 2026 that chain to the roots below fail Windows chain validation (CTL NotBefore, published in the April 2026 CTL release of Apr 28, 2026), which is why this often gets misdiagnosed as a CA outage: the certificate being replaced worked fine. Fully distrusted for new issuance (all uses): ANCERT root4; ANCERT root5; Byte Computer BYTE Root Certification Authority 001; Cybertrust Japan SecureSign RootCA11; Cybertrust Japan CA12; SwissSign Silver CA - G2. S/MIME-only NotBefore (email certificates issued after the date): AC Camerfirma Global Chambersign Root 2016; AC Camerfirma Chambers of Commerce Root 2016; Firmaprofesional firma2048; CFCA EV root (China Financial Certification Authority); ComSign root1; Cybertrust Japan CA14; Cybertrust Japan CA15; Cybertrust Japan iTrust Root Certification Authority; GDCA TrustAUTH R5 ROOT; GoDaddy GD Class 2 root; GoDaddy gdroot-g2; Starfield SF Class 2 root; Starfield sfroot-g2; Halcom Root Certificate Authority; HARICA 2015 RSA; HARICA 2015 ECC; NAVER Global Root Certification Authority; OATI oati_ca1; TrustFactory Client Root Certificate Authority. Disabled outright: AC Camerfirma CommerceRoot; Nets DanID (TDC) OCES Root. Certificates issued before May 19, 2026 remain trusted, and timestamped signatures continue to validate.",
         "source": "microsoft",
         "source_url": "https://github.com/TrustedRootProgram/Program-Requirements/blob/main/trusted-root/2026/april-2026.md",
         "category": "certificates",
@@ -2338,7 +2338,7 @@ RELATED_RFCS = [
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
     "lastUpdated": "2026-07-21",
-    "dataVersion": "2.4.7",
+    "dataVersion": "2.4.8",
     "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program Requirements v1.2, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
