@@ -181,10 +181,25 @@ MANUAL_CHECK_REQUIRED = []
 # Each entry: id, date, title, description, source, category, isMajor.
 # Optional keys: impact, is_estimated (date is not day-precise, rendered as
 # "~ Est." badge), source_url (link to the authoritative source).
+#
+# Status is computed from the date — never hardcode it — with one exception:
+# set "status": "ongoing" explicitly on type (b) entries.
+#   type (b) = the date STARTED a rule whose failure mode recurs per-reader
+#              after that date (renewal traps like NotBefore distrusts,
+#              rolling processes, in-force regimes) -> "ongoing", rendered
+#              as an amber "In force" badge, never green "Completed".
+#   type (a) = the ecosystem transitioned once and the rule is now baseline
+#              (requirement effective dates, due dates, one-time events)
+#              -> no status key; computes "passed" after the date.
+# The distinction is editorial and cannot be inferred from category — decide
+# it per entry when adding one. Applies identically to framework sub-list
+# deadlines. Front-end mapping: FRONTEND_ONGOING_STATUS_SPEC.md. Tests lock
+# the classification in test_source_url_and_estimates.py.
 DEADLINES = [
     {
         "id": "chrome-digicert-legacy-roots-distrust",
         "date": "2026-07-01",
+        "status": "ongoing",
         "title": "Chrome distrust: DigiCert Trusted Root G4 / Assured ID G2/G3 (new issuance)",
         "description": "Chrome Root Program removes DigiCert Trusted Root G4, Assured ID G2, and Assured ID G3 (not dedicated TLS hierarchies — they also issued Code Signing/Timestamp ICAs). TLS certificates issued on or after 2026-07-01 from these roots are not Chrome-trusted; certificates issued before remain trusted until expiry. New issuance and reissues must chain to DigiCert Global Root G2 (RSA) or G3 (ECC).",
         "source": "chrome",
@@ -326,6 +341,7 @@ DEADLINES = [
     {
         "id": "chrome-clientauth-ica",
         "date": "2025-06-15",
+        "status": "ongoing",
         "title": "Chrome Stops Trusting Mixed-EKU ICAs",
         "description": "Chrome will no longer trust intermediate certificates carrying both ServerAuth and ClientAuth EKUs.",
         "source": "chrome",
@@ -532,6 +548,7 @@ DEADLINES = [
     {
         "id": "microsoft-secure-boot-expiry",
         "date": "2026-06-01",
+        "status": "ongoing",
         "title": "Microsoft Secure Boot 2011 certificates begin expiring",
         "description": "Rolling expiration of the 2011-era Microsoft Secure Boot certificates begins June 2026 — not a single hard cutoff. Devices without 2023 certificates continue booting but lose access to new Secure Boot updates, boot manager updates, and revocation list updates. Affects BitLocker hardening and third-party bootloaders. Replacement certs: Microsoft UEFI CA 2023, Windows UEFI CA 2023, Microsoft Corporation KEK 2K CA 2023.",
         "source": "microsoft",
@@ -715,6 +732,7 @@ DEADLINES = [
     {
         "id": "chrome-entrust-distrust",
         "date": "2024-11-11",
+        "status": "ongoing",
         "title": "Chrome Entrust Distrust",
         "description": "Chrome distrusts TLS certificates issued by Entrust after this date.",
         "source": "chrome",
@@ -726,6 +744,7 @@ DEADLINES = [
     {
         "id": "apple-entrust-distrust",
         "date": "2024-11-15",
+        "status": "ongoing",
         "title": "Apple Entrust Distrust",
         "description": "Apple distrusts TLS certificates issued by Entrust after this date.",
         "source": "apple",
@@ -737,6 +756,7 @@ DEADLINES = [
     {
         "id": "mozilla-entrust-distrust",
         "date": "2024-11-30",
+        "status": "ongoing",
         "title": "Mozilla Entrust Distrust",
         "description": "Firefox distrusts TLS certificates issued by Entrust after this date.",
         "source": "mozilla",
@@ -748,6 +768,7 @@ DEADLINES = [
     {
         "id": "microsoft-entrust-distrust",
         "date": "2025-04-16",
+        "status": "ongoing",
         "title": "Microsoft Entrust Distrust",
         "description": "Microsoft distrusts TLS certificates issued by Entrust after this date.",
         "source": "microsoft",
@@ -761,6 +782,7 @@ DEADLINES = [
     {
         "id": "microsoft-april-2026-ctl-notbefore",
         "date": "2026-05-19",
+        "status": "ongoing",
         "title": "Microsoft NotBefore distrust: SwissSign Silver G2, SecureSign RootCA11/CA12, ANCERT (new issuance)",
         "description": "Existing certificates keep working — renewals break. Certificates issued after May 19, 2026 that chain to the roots below fail Windows chain validation (CTL NotBefore, published in the April 2026 CTL release of Apr 28, 2026), which is why this often gets misdiagnosed as a CA outage: the certificate being replaced worked fine. Fully distrusted for new issuance (all uses): ANCERT root4; ANCERT root5; Byte Computer BYTE Root Certification Authority 001; Cybertrust Japan SecureSign RootCA11; Cybertrust Japan CA12; SwissSign Silver CA - G2. S/MIME-only NotBefore (email certificates issued after the date): AC Camerfirma Global Chambersign Root 2016; AC Camerfirma Chambers of Commerce Root 2016; Firmaprofesional firma2048; CFCA EV root (China Financial Certification Authority); ComSign root1; Cybertrust Japan CA14; Cybertrust Japan CA15; Cybertrust Japan iTrust Root Certification Authority; GDCA TrustAUTH R5 ROOT; GoDaddy GD Class 2 root; GoDaddy gdroot-g2; Starfield SF Class 2 root; Starfield sfroot-g2; Halcom Root Certificate Authority; HARICA 2015 RSA; HARICA 2015 ECC; NAVER Global Root Certification Authority; OATI oati_ca1; TrustFactory Client Root Certificate Authority. Disabled outright: AC Camerfirma CommerceRoot; Nets DanID (TDC) OCES Root. Certificates issued before May 19, 2026 remain trusted, and timestamped signatures continue to validate.",
         "source": "microsoft",
@@ -776,6 +798,7 @@ DEADLINES = [
     {
         "id": "microsoft-trp-single-purpose-roots",
         "date": "2026-07-01",
+        "status": "ongoing",
         "title": "Microsoft TRP: single-purpose roots + 10-year max validity for new root submissions",
         "description": "Trusted Root Program Requirements v1.2 (May 20, 2026), effective for root certificates submitted on or after July 1, 2026: TLS server authentication, S/MIME, and code signing must be separate dedicated trust anchors (only Client Authentication may be combined, plus Time Stamping on code-signing roots), and newly minted roots are capped at 10 years validity from submission. Multi-EKU roots submitted before January 1, 2027 remain trusted unless Microsoft directs otherwise. v1.2 also mandates public incident disclosure in Bugzilla per the CCADB incident-report format.",
         "source": "microsoft",
@@ -1066,6 +1089,7 @@ DEADLINES = [
     {
         "id": "digicert-g1-root-distrust",
         "date": "2026-04-15",
+        "status": "ongoing",
         "title": "DigiCert G1 roots distrusted by Chrome and Mozilla",
         "description": "On April 15, 2026 Chrome and Mozilla removed DigiCert's first-generation roots — DigiCert Assured ID Root CA, DigiCert Global Root CA, DigiCert High Assurance EV Root CA — from their trust stores. Full removal: ALL TLS certificates chaining solely to G1 roots lost trust regardless of issuance date; reissuance under Global Root G2 (RSA) or G3 (ECC) required. Distinct from the Chrome-only Trusted Root G4 / Assured ID G2/G3 action (SCTNotAfter-style, certs issued on/after 2026-07-01); related to DigiCert's 2026-05-15 self-revocation of non-TLS G2/G3 ICAs and G5 cross-signed roots — all part of the dedicated-TLS-hierarchy alignment.",
         "source": "chrome",
@@ -1215,6 +1239,7 @@ REGULATORY_FRAMEWORKS = [
                 "id": "dora-effective",
                 "title": "DORA Effective",
                 "date": "2025-01-17",
+                "status": "ongoing",
                 "source_url": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022R2554",
                 "category": "effective",
                 "impact": "All EU financial entities must comply with DORA's ICT risk management, incident reporting, and third-party risk requirements - no transitional period.",
@@ -1300,6 +1325,7 @@ REGULATORY_FRAMEWORKS = [
                 "id": "nis2-germany-bsi",
                 "title": "Germany BSI Act Effective",
                 "date": "2025-12-06",
+                "status": "ongoing",
                 "source_url": "https://www.recht.bund.de/bgbl/1/2025/301/VO.html",
                 "category": "national",
                 "impact": "Entities in scope in Germany become subject to the amended BSI Act's registration, security, and reporting obligations.",
@@ -2338,7 +2364,7 @@ RELATED_RFCS = [
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
     "lastUpdated": "2026-07-21",
-    "dataVersion": "2.4.8",
+    "dataVersion": "2.4.9",
     "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program Requirements v1.2, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [

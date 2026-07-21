@@ -110,5 +110,56 @@ check("no deadline carries a bare severity word as impact", bare == [])
 check("isMajor always present and boolean",
       all(isinstance(d.get("isMajor"), bool) for d in unified))
 
+print("== ongoing (type b) status classification ==")
+# type (b) = the date started a rule whose failure mode recurs per-reader
+# after that date (renewal traps, rolling processes, in-force regimes) ->
+# explicit status "ongoing", which survives date computation. type (a) =
+# the ecosystem transitioned once and the rule is now baseline -> computes
+# "passed". Rule documented above DEADLINES; adding a new ongoing entry
+# means updating ONGOING_IDS here (deliberate: classification is editorial
+# and should not change silently).
+ONGOING_IDS = {
+    "chrome-entrust-distrust", "apple-entrust-distrust",
+    "mozilla-entrust-distrust", "microsoft-entrust-distrust",
+    "digicert-g1-root-distrust", "microsoft-april-2026-ctl-notbefore",
+    "microsoft-secure-boot-expiry", "chrome-digicert-legacy-roots-distrust",
+    "microsoft-trp-single-purpose-roots", "chrome-clientauth-ica",
+    "chrome-dedicated-tls-enforcement", "luxembourg-nis2-in-force",
+    "dora-effective", "nis2-germany-bsi",
+}
+unified = pki.get_all_deadlines_unified()
+by_id = {d["id"]: d for d in unified}
+missing = [i for i in sorted(ONGOING_IDS) if i not in by_id]
+check(f"all classified ids exist in unified {missing or ''}", not missing)
+not_ongoing = [i for i in sorted(ONGOING_IDS)
+               if by_id.get(i, {}).get("status") != "ongoing"]
+check(f"all {len(ONGOING_IDS)} type (b) entries report ongoing {not_ongoing or ''}",
+      not not_ongoing)
+unclassified = [d["id"] for d in unified
+                if d["status"] == "ongoing" and d["id"] not in ONGOING_IDS]
+check(f"no entry reports ongoing outside the classification {unclassified or ''}",
+      not unclassified)
+check("framework sub-list entries honor ongoing identically to top-level",
+      by_id["dora-effective"]["status"] == "ongoing"
+      and by_id["nis2-germany-bsi"]["status"] == "ongoing")
+check("plain past entry (type a) still computes passed",
+      by_id["digicert-clientauth-default"]["status"] == "passed")
+check("future entries still compute upcoming",
+      all(d["status"] == "upcoming" for d in unified if d["date"] > today))
+
+print("== CSV carries ongoing ==")
+import csv as _csv
+import io as _io
+ongoing_rows = list(_csv.DictReader(_io.StringIO(pki.build_deadlines_csv(status="ongoing"))))
+passed_rows = list(_csv.DictReader(_io.StringIO(pki.build_deadlines_csv(status="passed"))))
+check(f"status=ongoing filter returns exactly the {len(ONGOING_IDS)} classified entries",
+      len(ongoing_rows) == len(ONGOING_IDS)
+      and all(r["status"] == "ongoing" for r in ongoing_rows))
+check("april CTL NotBefore row exports as ongoing",
+      any("Microsoft NotBefore distrust" in r["title"] for r in ongoing_rows))
+check("status=passed no longer includes type (b) entries",
+      not any("Microsoft NotBefore distrust" in r["title"] for r in passed_rows)
+      and not any("Entrust Distrust" in r["title"] for r in passed_rows))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 raise SystemExit(1 if FAIL else 0)
