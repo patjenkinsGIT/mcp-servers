@@ -756,6 +756,34 @@ DEADLINES = [
         "isMajor": True,
         "impact": "Certificates from Entrust CAs will not be trusted in Windows/Edge."
     },
+    # 2026-07-21 blind-window review: entries below recovered from the ~9 months
+    # the Microsoft source pointed at a dead learn.microsoft.com page.
+    {
+        "id": "microsoft-april-2026-ctl-notbefore",
+        "date": "2026-05-19",
+        "title": "Microsoft NotBefore distrust: SwissSign Silver G2, SecureSign RootCA11/CA12, ANCERT (new issuance)",
+        "description": "April 2026 CTL release (published Apr 28, 2026). Certificates issued after May 19, 2026 are no longer trusted on Windows for: SwissSign Silver CA - G2, Cybertrust Japan SecureSign RootCA11 and CA12, two ANCERT roots, and Byte Root CA (full distrust); plus S/MIME-only NotBefore for 19 roots including legacy GoDaddy Class 2/gdroot-g2/sfroot-g2, HARICA 2015 RSA/ECC, CFCA EV, Camerfirma, and Firmaprofesional. Camerfirma CommerceRoot and Nets DanID OCES were disabled outright. Certificates issued before the date remain trusted.",
+        "source": "microsoft",
+        "source_url": "https://github.com/TrustedRootProgram/Program-Requirements/blob/main/trusted-root/2026/april-2026.md",
+        "category": "certificates",
+        "isMajor": True,
+        "impact": "Renewals and new certificates under the affected roots fail Windows/Edge chain validation even though existing certificates keep working.",
+        "consequences": {
+            "enforcement": "Windows CTL NotBefore mechanism: certificates issued after 2026-05-19 from the listed roots fail chain validation on Windows; pre-existing certificates and timestamped signatures continue to validate.",
+            "scenario": "A team renews a TLS certificate under SecureSign RootCA11 or SwissSign Silver CA - G2 in mid-2026. The renewed certificate is silently untrusted on Windows clients while the certificate it replaced worked fine — the failure only appears at renewal, so it gets misdiagnosed as a CA outage instead of a root-store distrust.",
+        },
+    },
+    {
+        "id": "microsoft-trp-single-purpose-roots",
+        "date": "2026-07-01",
+        "title": "Microsoft TRP: single-purpose roots + 10-year max validity for new root submissions",
+        "description": "Trusted Root Program Requirements v1.2 (May 20, 2026), effective for root certificates submitted on or after July 1, 2026: TLS server authentication, S/MIME, and code signing must be separate dedicated trust anchors (only Client Authentication may be combined, plus Time Stamping on code-signing roots), and newly minted roots are capped at 10 years validity from submission. Multi-EKU roots submitted before January 1, 2027 remain trusted unless Microsoft directs otherwise. v1.2 also mandates public incident disclosure in Bugzilla per the CCADB incident-report format.",
+        "source": "microsoft",
+        "source_url": "https://github.com/TrustedRootProgram/Program-Requirements/blob/main/Requirements.md",
+        "category": "root-store",
+        "isMajor": False,
+        "impact": "No action unless you operate a CA. Roots submitted on or after 2026-07-01 must be single-purpose and capped at 10 years; multi-EKU roots submitted before 2027-01-01 stay trusted, so CAs with multi-purpose hierarchies have until then to split them.",
+    },
     # =============================================================================
     # POST-QUANTUM CRYPTOGRAPHY (PQC) / CNSA 2.0
     # =============================================================================
@@ -769,6 +797,17 @@ DEADLINES = [
         "category": "pqc",
         "isMajor": True,
         "impact": "Start inventory and planning now",
+    },
+    {
+        "id": "microsoft-pqc-tls-pilot",
+        "date": "2026-06-08",
+        "title": "Microsoft launches PQC TLS Pilot Program (ML-DSA-87 roots)",
+        "description": "Trusted Root Program PQC TLS Pilot V1.0: approved participating CAs may operate one ML-DSA-87 pilot root (ML-DSA-44/65 permitted below the root) for TLS server/client authentication testing in closed environments. Pilot certificates are NOT publicly trusted, not CT-logged, and not in CCADB; validity caps are 1 year for roots and subordinates, 90 days for leaves.",
+        "source": "microsoft",
+        "source_url": "https://github.com/TrustedRootProgram/Program-Requirements/blob/main/PQC%20Pilot%20Program.md",
+        "category": "pqc",
+        "isMajor": False,
+        "impact": "Informational — Windows-side PQC TLS interoperability testing has begun; no production action for enterprises.",
     },
     {
         "id": "cnsa-2-software-signing",
@@ -1614,23 +1653,30 @@ ROOT_STORES = [
     {
         "id": "microsoft",
         "name": "Microsoft Trusted Root Program",
-        "version": "2024",
+        "version": "1.2 (May 2026)",
         "url": "https://github.com/TrustedRootProgram/Program-Requirements",
         "platforms": ["Windows", "Edge (legacy)", "Internet Explorer"],
         "keyRequirements": [
             "Broader root store (~400+ roots)",
             "Includes enterprise/government use cases",
             "Traditional CRL/OCSP checking",
-            "Code signing roots included"
+            "Code signing roots included",
+            "Single-purpose (EKU-separated) roots for submissions on/after Jul 2026",
+            "New roots capped at 10-year validity",
+            "Mandatory public incident reporting (Bugzilla, CCADB format)"
         ],
         "recentActions": [
-            {"action": "Entrust distrust", "date": "2025-04-16", "description": "Announced Feb 25, 2025. Entrust distrusted for TLS certs issued after this date"}
+            {"action": "Entrust distrust", "date": "2025-04-16", "description": "Announced Feb 25, 2025. Entrust distrusted for TLS certs issued after this date"},
+            {"action": "April 2026 CTL NotBefore distrusts", "date": "2026-05-19", "description": "New issuance distrusted for SwissSign Silver CA - G2, SecureSign RootCA11/CA12, ANCERT, Byte; S/MIME-only NotBefore for 19 legacy roots incl. GoDaddy Class 2/G2, HARICA 2015"},
+            {"action": "Requirements v1.2", "date": "2026-05-20", "description": "Single-purpose roots + 10-year max validity for new submissions (effective Jul 1, 2026), suspect-code definition, mandatory Bugzilla/CCADB incident reporting"},
+            {"action": "PQC TLS Pilot Program V1.0", "date": "2026-06-08", "description": "ML-DSA-87 pilot roots for closed-environment TLS testing; not publicly trusted"},
+            {"action": "June 2026 CTL release", "date": "2026-06-30", "description": "~40 root additions; CTLM policy ships in monthly CTL (opt-in CT validation under test); CTL signatures now SHA-2 only"}
         ],
         "evDisplay": "Shows organization in address bar",
         "revocationMethod": "CRL/OCSP",
         "ctRequired": False,
         "automationRequired": "Not required",
-        "notes": "Most permissive program, slowest to act on CA issues"
+        "notes": "Requirements v1.1/v1.2 (Nov 2025 / May 2026) mandate CA/B Forum BR and CCADB compliance with no exceptions; CT validation is being tested on Windows via the CTLM policy but is not yet required"
     }
 ]
 
@@ -2292,8 +2338,8 @@ RELATED_RFCS = [
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
     "lastUpdated": "2026-07-21",
-    "dataVersion": "2.4.6",
-    "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
+    "dataVersion": "2.4.7",
+    "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program Requirements v1.2, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
         "https://cabforum.org",
@@ -2315,8 +2361,8 @@ DATA_FRESHNESS = {
     "nextReviewDue": "2026-08-20",
     "reviewIntervalDays": 30,
     "fieldVerifications": {
-        "deadlines": {"verified": "2026-07-13", "source": "2026-07-13 review: CSC-32 reserved policy OID (2026-09-15) verified against CS BR v3.11.0 §7.1.6.4 and ballot post; DigiCert G1 Chrome+Mozilla full distrust (2026-04-15) verified against DigiCert alerts; DORA Art. 31(12) CTPP EU-subsidiary window (~2026-11-18, estimated) verified against EBA/ESMA announcements and regulation text. Ten stale review flags cleared. SC0101v2 (IPR ~Aug 6) and SMC017v2 (IPR ~Jul 30) remain held. Prior review 2026-07-10"},
-        "rootStores": {"verified": "2026-07-21", "source": "Individual root program policies. 2026-07-21: Microsoft source repointed to github.com/TrustedRootProgram/Program-Requirements (official since Oct 2025; superseded learn.microsoft.com page was monitored dead ~9 months) and converted from manual check to commits.atom feed."},
+        "deadlines": {"verified": "2026-07-21", "source": "2026-07-21 Microsoft TRP blind-window review (Oct 2025-Jul 2026): added microsoft-april-2026-ctl-notbefore (NotBefore 2026-05-19, verified against trusted-root/2026/april-2026.md), microsoft-trp-single-purpose-roots (2026-07-01, Requirements.md v1.2 sections 3.1.8/3.4.3), microsoft-pqc-tls-pilot (2026-06-08, PQC Pilot Program.md V1.0). SC0101v2 (IPR ~Aug 6) and SMC017v2 (IPR ~Jul 30) remain held. Prior review 2026-07-13"},
+        "rootStores": {"verified": "2026-07-21", "source": "Individual root program policies. 2026-07-21: Microsoft source repointed to github.com/TrustedRootProgram/Program-Requirements (official since Oct 2025; superseded learn.microsoft.com page was monitored dead ~9 months) and converted from manual check to commits.atom feed. Blind-window review same day: Microsoft framework entry updated to Requirements v1.2 (single-purpose roots, 10-yr validity, incident reporting, CTLM) with April/June 2026 CTL actions."},
         "algorithmRequirements": {"verified": "2026-05-14", "source": "CA/B Forum TLS BR 2.2.6, NIST FIPS 203/204/205, NIST SP 800-131A Rev 3"},
         "caChains": {"verified": "2026-05-14", "source": "Official CA documentation"},
         "pqcStandards": {"verified": "2026-05-14", "source": "NIST FIPS 203/204/205, NSA CNSA 2.0"}
