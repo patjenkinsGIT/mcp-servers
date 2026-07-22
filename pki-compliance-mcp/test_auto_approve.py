@@ -26,6 +26,7 @@ def check(name, cond):
 
 d = Path(tempfile.mkdtemp())
 car.DATA_DIR = d
+car.HOLDS_FILE = d / "review_holds.json"  # isolate from the host's real manual pins
 car.REJECTED_FILE = d / "rejected.json"
 car.REJECTED_FILE.write_text(json.dumps({"ids": ["rejected-1"], "signatures": []}))
 
