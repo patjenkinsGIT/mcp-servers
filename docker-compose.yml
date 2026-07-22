@@ -65,6 +65,21 @@ services:
       - DATA_DIR=/data
     restart: unless-stopped
     command: ["python", "myrobotictrader_content_mcp.py"]
+  fixmycert-news:
+    build:
+      context: ./fixmycert-news-mcp
+      dockerfile: ../Dockerfile.mcp
+    container_name: fixmycert-news-mcp
+    ports:
+      - "8086:8086"
+    environment:
+      - MCP_TRANSPORT=sse
+      - MCP_PORT=8086
+      - MCP_HOST=0.0.0.0
+      - NEWS_API_BASE_URL=${NEWS_API_BASE_URL:-https://fixmycert.com}
+      - NEWS_ADMIN_SECRET=${NEWS_ADMIN_SECRET:-}
+      - NEWS_CRON_SECRET=${NEWS_CRON_SECRET:-}
+    restart: unless-stopped
   pki-compliance:
     build:
       context: ./pki-compliance-mcp
