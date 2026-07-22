@@ -45,6 +45,41 @@ appears in URLs or logs. `/api/cron/fetch-news` is query-only (`?key=`)
 against `CRON_SECRET`; httpx request logging is silenced so that URL stays
 out of container logs.
 
+## Backend behavior notes (learned the hard way, 2026-07-22)
+
+- **Unique-URL constraint**: the backend rejects (500) any item whose `url` duplicates an
+  existing item's. When several items share a primary source (e.g. the CNSA 2.0 FAQ PDF,
+  Chrome root policy page), append a distinguishing `#fragment`.
+- **`opportunityTags` is an enum**: `content-guide | video | consultant-digest | product | partnership | none`.
+  Anything else is a 400.
+- **`publishedAt` is stamped at draft creation and NOT updated by publishing.** If a draft
+  sits before going live, set `publishedAt` via `news_update` at publish time or the feed
+  shows the creation date.
+- **Retention**: aggregated RSS items (`isFirstParty=false`) are auto-pruned 30 days after
+  `publishedAt` by the cron's cleanup. First-party items are never auto-pruned — they stay
+  until manually archived.
+- **Public feed**: max 50 items/request (default 20), offset pagination, no total cap.
+  `category` is the only public filter — `isFirstParty` filtering is admin-only.
+
+## Editorial state (as of 2026-07-22)
+
+All Compliance Hub deadlines have first-party coverage (54 items, `news_get_uncovered` = 0).
+Rollout was tranched to avoid a bot-like publish burst: tranche 1 (9 near-term 2026 items)
+published 2026-07-22; tranches 2 (8), 3a (15), 3b (22) auto-publish via one-time cloud
+routines on Jul 24 / 27 / 30, each stamping `publishedAt` to its run date.
+
+## Automation (claude.ai/code routines)
+
+| Routine | Schedule | What it does |
+|---------|----------|--------------|
+| Publish tranche 2 / 3a / 3b | one-time: Jul 24 / 27 / 30 2026, 14:00 UTC | Stamps `publishedAt`, publishes its fixed ID list via this MCP server (public port), verifies against `/api/news` |
+| Weekly gap-check | Mondays 15:00 UTC | Read-only report: uncovered Hub deadlines + feed health, built ONLY on the public APIs (no MCP port, survives firewalling) |
+
+**Security TODO after Jul 30, 2026**: this MCP server listens unauthenticated on the
+droplet's public IP (134.199.198.164:8086) — anyone who finds it can publish to the live
+feed. The publish routines depend on that; once they've fired, firewall 8086 (and ideally
+8084/8085) to the Tailscale network. The weekly gap-check is unaffected.
+
 ## Backing API
 
 - `GET /api/news` — public feed (published only)
