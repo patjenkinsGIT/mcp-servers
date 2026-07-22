@@ -38,9 +38,12 @@ call against production.
 | `NEWS_ADMIN_SECRET` | yes | Dedicated admin secret; must equal the value in the FixMyCert Replit Secrets. Server exits at startup if missing |
 | `NEWS_CRON_SECRET` | no | Only for `news_trigger_fetch`; equals `CRON_SECRET` in Replit Secrets (separate from the admin secret) |
 
-Auth is sent **both** as `?key=` query param (documented form for
-`GET /api/news/admin`) and as an `x-admin-key` header (the convention used by
-fixmycert.com's other admin routes), so either server-side check works.
+Auth (confirmed against the Repl's `checkNewsKey` helper): the three admin
+routes accept `?key=` **or** `Authorization: Bearer` against
+`NEWS_ADMIN_SECRET` — this client uses the Bearer header so the secret never
+appears in URLs or logs. `/api/cron/fetch-news` is query-only (`?key=`)
+against `CRON_SECRET`; httpx request logging is silenced so that URL stays
+out of container logs.
 
 ## Backing API
 

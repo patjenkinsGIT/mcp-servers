@@ -9,14 +9,17 @@ Transport: stdio locally, SSE in Docker (MCP_TRANSPORT=sse)
 Config: env vars only — NEWS_API_BASE_URL, NEWS_ADMIN_SECRET (required),
         NEWS_CRON_SECRET (optional, only for news_trigger_fetch)
 
-Auth note: GET /api/news/admin is documented as `?key={SECRET}`; the other
-admin surfaces on fixmycert.com use an `x-admin-key` header. Every authed
-call here sends the secret BOTH ways (query `key` + `x-admin-key` header),
-which works regardless of which one a given route checks.
+Auth (confirmed against the Repl's checkNewsKey helper, 2026-07-22):
+the admin routes accept `?key=` OR `Authorization: Bearer` against
+NEWS_ADMIN_SECRET; we use the Bearer header so the secret never appears in
+URLs (httpx logs full request URLs at INFO). /api/cron/fetch-news is
+query-only (`?key=`) against CRON_SECRET — no header support there, so
+httpx logging is silenced below to keep it out of container logs.
 """
 
 import difflib
 import json
+import logging
 import os
 import re
 import sys
@@ -45,6 +48,10 @@ NEWS_CLUSTERS = [
 STATUSES = ["draft", "published", "archived"]
 
 HTTP_TIMEOUT = httpx.Timeout(30.0)
+
+# httpx logs full request URLs at INFO — would leak ?key= secrets into
+# container logs (the cron route only accepts the secret via query string)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # ============================================================
 # Server
@@ -185,9 +192,9 @@ def _redact(text: str) -> str:
 
 
 def _auth_params_headers() -> tuple[dict, dict]:
-    """Secret both as ?key= (documented for /api/news/admin) and x-admin-key
-    header (convention on fixmycert.com's other admin routes)."""
-    return {"key": NEWS_ADMIN_SECRET}, {"x-admin-key": NEWS_ADMIN_SECRET}
+    """Bearer header only — confirmed accepted by all news admin routes;
+    keeps the secret out of URLs and logs."""
+    return {}, {"Authorization": f"Bearer {NEWS_ADMIN_SECRET}"}
 
 
 async def _request(
@@ -884,9 +891,8 @@ async def news_trigger_fetch() -> str:
     url = NEWS_API_BASE_URL + "/api/cron/fetch-news"
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0), follow_redirects=True) as client:
-            resp = await client.get(url, params={"key": NEWS_CRON_SECRET},
-                                    headers={"authorization": f"Bearer {NEWS_CRON_SECRET}",
-                                             "x-cron-key": NEWS_CRON_SECRET})
+            # cron route is query-only (?key=) — confirmed no header support
+            resp = await client.get(url, params={"key": NEWS_CRON_SECRET})
     except httpx.HTTPError as e:
         return f"❌ Could not reach {_redact(url)}: {_redact(str(e))}"
     if resp.status_code == 401:
