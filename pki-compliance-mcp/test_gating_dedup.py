@@ -221,7 +221,10 @@ check("dedicated-TLS flag anchors and matches reworded",
 
 print("== reject_ids persistence ==")
 d = with_tmp()
-(d / "pending_updates_2026-06-18.json").write_text(json.dumps({
+# Relative date: reject_ids only maps signatures from the last 30 days of
+# pending files (a hardcoded date here aged out of the window and went stale).
+WEEK_AGO = (datetime.now(timezone.utc).date() - timedelta(days=7)).isoformat()
+(d / f"pending_updates_{WEEK_AGO}.json").write_text(json.dumps({
     "new_deadlines": [{"id": "foo", "title": "Foo Thing", "date": "2026-07-01"}]
 }))
 total = car.reject_ids(["foo"])

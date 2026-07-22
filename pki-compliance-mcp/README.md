@@ -125,6 +125,7 @@ No pytest needed — plain scripts, no network calls:
 ```bash
 python3 -m py_compile pki_compliance_mcp.py compliance_auto_refresh.py
 python3 test_gating_dedup.py
+python3 test_dedup_regression_0721.py
 python3 test_source_url_and_estimates.py
 python3 test_auto_approve.py
 python3 test_content_drafts.py

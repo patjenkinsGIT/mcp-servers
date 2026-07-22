@@ -369,7 +369,9 @@ def log(message: str):
     line = f"[{timestamp}] {message}"
     print(line)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(LOG_FILE, "a") as f:
+    # Derive from DATA_DIR at call time so tests that redirect DATA_DIR
+    # don't write into the real log (LOG_FILE is frozen at import).
+    with open(DATA_DIR / LOG_FILE.name, "a") as f:
         f.write(line + "\n")
 
 
@@ -468,6 +470,11 @@ def _sig(item: dict) -> str:
 # Review flags have no title/date and the model invents a different id every
 # day for the same topic, so they get their own signature: the set of "anchor"
 # tokens (ballot numbers, regulation names) found in id+description+reason.
+# Regulation names alone (nis2, dora) are too coarse: every NIS2 story would
+# share one bucket, so rejecting one would suppress them all, and distinct
+# stories collapse to a single outstanding row (2026-07-21: a CJEU-referral
+# flag silently merged into a transposition flag's bucket). The event-type
+# qualifiers (cjeu, ctpp, transposition, ransomware) split those buckets.
 _REVIEW_ANCHOR_RE = re.compile(
     r"\b("
     r"sc[ -]?\d{2,4}(?:v\d+)?"       # server cert ballots: SC087v2, SC101, SC0101v2
@@ -476,6 +483,10 @@ _REVIEW_ANCHOR_RE = re.compile(
     r"|cscwg[ -]?\d+"
     r"|nis[ -]?2"
     r"|dora"
+    r"|cjeu"                         # EU Court of Justice referrals
+    r"|ctpps?"                       # DORA critical ICT third-party providers
+    r"|transpos(?:e[sd]?|ing|itions?)"  # national transposition (NIS2 etc.)
+    r"|ransomware"                   # UK ransomware/cyber-extortion reporting bills
     r"|nspm[ -]?12"
     r"|eo[ -]?14\d{3}"               # executive orders: EO 14412, EO 14413
     r"|m[ -]?2[0-9][ -]?\d{2}"       # OMB memos: M-23-02, M-26-15
@@ -499,6 +510,12 @@ _ANCHOR_CANON = {
     "crosssigning": "crosssign",
     "kerneldrivers": "kerneldriver",
     "cybersecurityandresilience": "ukcsr",
+    "ctpps": "ctpp",
+    "transpose": "transposition",
+    "transposes": "transposition",
+    "transposed": "transposition",
+    "transposing": "transposition",
+    "transpositions": "transposition",
 }
 
 
@@ -667,33 +684,52 @@ def load_rejected() -> dict:
         return {"ids": set(), "signatures": set()}
 
 
-def reject_ids(ids: list[str]) -> int:
-    """Persist rejected item ids (+ signatures looked up from the latest
-    pending_updates file) so they never resurface. Returns total rejected."""
+def reject_ids(ids: list[str], days: int = 30) -> int:
+    """Persist rejected item ids (+ signatures looked up from pending_updates
+    files of the last `days` days) so they never resurface. Returns total
+    rejected.
+
+    Signatures must be mapped from the whole recent window, not just the
+    newest file: verdicts usually target the aggregated outstanding backlog,
+    whose items live in older files. (2026-07-13: all 10 rejects that day
+    consulted only the newest file — an empty parse-failure stub — persisted
+    as bare ids, and the next research run's freshly-invented ids sailed
+    straight past them.) A bare id is still recorded, but only a signature
+    survives id churn, so unmapped ids get a loud warning."""
     raw = {"ids": [], "signatures": []}
     if REJECTED_FILE.exists():
         raw = json.loads(REJECTED_FILE.read_text())
     idset, sigset = set(raw.get("ids", [])), set(raw.get("signatures", []))
 
     sigmap: dict[str, str] = {}
-    files = sorted(DATA_DIR.glob("pending_updates_*.json"))
-    if files:
+    cutoff = datetime.now(timezone.utc).date() - timedelta(days=days)
+    for f in sorted(DATA_DIR.glob("pending_updates_*.json")):  # oldest→newest: newest wording wins
+        ds = f.stem.replace("pending_updates_", "")
         try:
-            data = json.loads(files[-1].read_text())
-            for key in ("new_deadlines", "updated_deadlines", "regulatory_updates"):
-                for it in data.get(key, []):
-                    if it.get("id"):
-                        sigmap[it["id"]] = _sig(it)
-            for it in data.get("needs_human_review", []):
-                if isinstance(it, dict) and it.get("id"):
-                    sigmap[it["id"]] = _review_sig(it)
+            if datetime.strptime(ds, "%Y-%m-%d").date() < cutoff:
+                continue
+        except ValueError:
+            continue
+        try:
+            data = json.loads(f.read_text())
         except Exception:
-            pass
+            continue
+        for key in ("new_deadlines", "updated_deadlines", "regulatory_updates"):
+            for it in data.get(key, []):
+                if isinstance(it, dict) and it.get("id"):
+                    sigmap[it["id"]] = _sig(it)
+        for it in data.get("needs_human_review", []):
+            if isinstance(it, dict) and it.get("id"):
+                sigmap[it["id"]] = _review_sig(it)
 
     for iid in ids:
         idset.add(iid)
         if iid in sigmap:
             sigset.add(sigmap[iid])
+        else:
+            log(f"WARNING: no signature found for {iid!r} in the last {days}d of "
+                f"pending files — id-only rejection will not suppress re-worded "
+                f"re-proposals of the same topic")
 
     REJECTED_FILE.write_text(
         json.dumps({"ids": sorted(idset), "signatures": sorted(sigset)}, indent=2)

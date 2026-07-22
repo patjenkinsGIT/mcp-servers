@@ -1,0 +1,51 @@
+{
+  "new_deadlines": [],
+  "updated_deadlines": [],
+  "document_version_updates": [],
+  "regulatory_updates": [],
+  "needs_human_review": [
+    {
+      "id": "cabf-csc32-status-discrepancy",
+      "description": "Discrepancy found: the CSC-32 ballot activity report describes CSC-32 ('Make a Reserved Policy OID Mandatory') as still in IPR Review Period (voted June 16, 2026), while the CA/B Forum document-version snapshot already lists Code Signing BR v3.11 as adopted via CSC-32 — which matches our existing compliance data (already at v3.11, Jun 2026). Recommend confirming true adoption status directly on cabforum.org before any further edits; no change made since current data already reflects v3.11.",
+      "source": "cab-forum",
+      "source_url": "https://cabforum.org/2026/06/16/ballot-csc-32-make-a-reserved-policy-oid-mandatory/",
+      "urgent": false
+    },
+    {
+      "id": "dora-ctpp-list-published",
+      "description": "The European Supervisory Authorities (ESAs) reportedly published the first list of designated Critical ICT Third-Party Providers (CTPPs) under DORA around November 18, 2025 (19 providers including AWS, Google Cloud, Microsoft, Oracle, SAP, IBM, Deutsche Telekom, Accenture). No specific ESA press-release URL was provided in research findings. Recommend sourcing the official ESA/EBA/EIOPA/ESMA announcement URL before adding as a new (historical) deadline/regulatory entry.",
+      "source": "regulatory",
+      "source_url": "",
+      "urgent": false
+    },
+    {
+      "id": "nis2-czechia-sweden-transposition",
+      "description": "Reported that Czechia's and Sweden's NIS2 transposition laws came into force November 1, 2025 (per a Wikipedia tracker, not a primary source). Needs an authoritative government/EU source URL before adding as confirmed entries.",
+      "source": "regulatory",
+      "source_url": "",
+      "urgent": false
+    },
+    {
+      "id": "nis2-cjeu-referral-laggard-states",
+      "description": "European Commission reportedly referred Ireland, Spain, France, and the Netherlands to the CJEU (around July 8, 2026 per summary table) for failing to transpose NIS2, seeking daily fines. No direct European Commission press-release URL was provided. Recommend confirming exact date and source before adding as a regulatory update.",
+      "source": "regulatory",
+      "source_url": "",
+      "urgent": false
+    },
+    {
+      "id": "nis2-commission-simplification-amendments",
+      "description": "European Commission reportedly proposed targeted amendments to NIS2 (Directive (EU) 2022/2555) on January 20, 2026, aimed at simplifying compliance for ~28,700 companies, building on the Nov 19, 2025 Digital Omnibus Package and proposing a single-entry incident reporting mechanism across NIS2/DORA/GDPR. This could materially affect existing NIS2 deadlines/requirements in our data. No direct source URL provided — recommend verifying via EU Commission's official proposal page before making any changes.",
+      "source": "regulatory",
+      "source_url": "",
+      "urgent": false
+    },
+    {
+      "id": "uk-cyber-extortion-ransomware-reporting-bill",
+      "description": "A separate private member's bill, the Cyber Extortion and Ransomware (Reporting) Bill, was introduced October 21, 2025, proposing mandatory 72-hour reporting of ransomware attacks/payments; second reading reportedly scheduled for May 29, 2026, though progress as a private member's bill is uncertain. Not currently tracked in compliance data. No direct UK Parliament bill-page URL provided — recommend sourcing before adding.",
+      "source": "regulatory",
+      "source_url": "",
+      "urgent": false
+    }
+  ],
+  "summary": "Regression fixture: the six needs_human_review flags from the 2026-07-21 weekly safety-net run, all of which had verdicts from the 2026-07-13 review session but only two of which were suppressed from the outstanding list."
+}
