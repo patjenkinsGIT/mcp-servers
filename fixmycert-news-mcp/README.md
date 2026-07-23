@@ -29,6 +29,9 @@ call against production.
 - `isPriority` floats an item to the top of `/news` — reserve for high-impact changes.
 - First-party items should carry a primary-source `url`, and a `symptomString`
   when the change causes a visible failure (e.g. `NET::ERR_CERT_AUTHORITY_INVALID`).
+- `internalUrl` is the FixMyCert-internal link shown alongside the item — a
+  site-relative path like `/guides/47-day-certificate-timeline`. Settable via
+  `news_add` / `news_update`.
 
 ## Environment variables
 
@@ -108,7 +111,8 @@ Client registration (Claude Desktop / Claude Code):
 
 ## Smoke test
 
-1. `news_add` a draft → shows in `news_list` (admin) but **not** on public `/api/news`
-2. `news_publish` it → appears on public `/api/news`
-3. `news_dashboard` and `news_get_uncovered` return sane data
-4. (cleanup) `news_archive` the test item
+1. `news_add` a draft (with `internalUrl`) → shows in `news_list` (admin) but **not** on public `/api/news`
+2. `internalUrl` reads back via `news_get`, then is changed via `news_update` and reads back again
+3. `news_publish` it → appears on public `/api/news`
+4. `news_dashboard` and `news_get_uncovered` return sane data
+5. (cleanup) `news_archive` the test item

@@ -121,6 +121,7 @@ class AddNewsInput(BaseModel):
     title: str = Field(min_length=5, description="Headline for the news item")
     excerpt: Optional[str] = Field(default=None, description="1-3 sentence summary shown in the feed")
     url: Optional[str] = Field(default=None, description="Primary-source URL (ballot, root program announcement, CA bulletin). If omitted the backend generates an internal permalink — first-party items should normally carry one")
+    internalUrl: Optional[str] = Field(default=None, description="FixMyCert-internal link shown alongside the item, as a site-relative path (e.g. /guides/47-day-certificate-timeline)")
     category: Optional[str] = Field(default=None, description="Feed category (e.g. ca_news, browser_updates, vendors, research)")
     newsCluster: NewsCluster = Field(description="Required cluster: ca-action | tls-validity | pqc | code-signing | smime | client-auth | other")
     symptomString: Optional[str] = Field(default=None, description="If the change causes a visible failure, the error string users will see (e.g. NET::ERR_CERT_AUTHORITY_INVALID)")
@@ -143,6 +144,7 @@ class UpdateNewsInput(BaseModel):
     title: Optional[str] = Field(default=None, description="New title")
     excerpt: Optional[str] = Field(default=None, description="New excerpt")
     url: Optional[str] = Field(default=None, description="New primary-source URL")
+    internalUrl: Optional[str] = Field(default=None, description="New FixMyCert-internal link (site-relative path, e.g. /guides/47-day-certificate-timeline)")
     category: Optional[str] = Field(default=None, description="New category")
     newsCluster: Optional[NewsCluster] = Field(default=None, description="New cluster")
     symptomString: Optional[str] = Field(default=None, description="New symptom string")
@@ -340,7 +342,7 @@ def _fmt_item_line(item: dict) -> str:
 
 def _fmt_item_full(item: dict) -> str:
     lines = [f"## {item.get('title', '(untitled)')}", ""]
-    for key in ("id", "status", "source", "sourceUrl", "url", "category", "newsCluster",
+    for key in ("id", "status", "source", "sourceUrl", "url", "internalUrl", "category", "newsCluster",
                 "symptomString", "deadlineId", "opportunityTags", "isPriority",
                 "isFirstParty", "excerpt", "publishedAt", "fetchedAt"):
         val = item.get(key)
@@ -660,7 +662,7 @@ async def news_add(params: AddNewsInput) -> str:
         "isPriority": params.isPriority,
         "status": params.status.value,
     }
-    for key in ("excerpt", "url", "category", "symptomString", "deadlineId", "opportunityTags", "publishedAt"):
+    for key in ("excerpt", "url", "internalUrl", "category", "symptomString", "deadlineId", "opportunityTags", "publishedAt"):
         val = getattr(params, key)
         if val is not None:
             body[key] = val
@@ -699,7 +701,7 @@ async def news_update(params: UpdateNewsInput) -> str:
         str: The updated item
     """
     fields: dict[str, Any] = {}
-    for key in ("title", "excerpt", "url", "category", "symptomString", "deadlineId",
+    for key in ("title", "excerpt", "url", "internalUrl", "category", "symptomString", "deadlineId",
                 "opportunityTags", "isPriority", "publishedAt"):
         val = getattr(params, key)
         if val is not None:

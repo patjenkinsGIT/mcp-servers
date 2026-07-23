@@ -29,11 +29,15 @@ async def main() -> int:
     failures = 0
     test_title = "SMOKE TEST fixmycert-news-mcp (safe to archive)"
 
-    # 1. Create draft
+    internal_url_v1 = "/guides/smoke-test-internal-link"
+    internal_url_v2 = "/guides/smoke-test-internal-link-updated"
+
+    # 1. Create draft (with internalUrl to prove POST accepts it)
     out = await s.news_add(s.AddNewsInput(
         title=test_title,
         excerpt="Automated smoke test item from fixmycert-news-mcp deploy verification.",
         newsCluster=s.NewsCluster.OTHER,
+        internalUrl=internal_url_v1,
     ))
     m = re.search(r"\*\*id\*\*: ([0-9a-f-]{8,})", out)
     if not check("news_add created draft", bool(m), out[:200] if not m else m.group(1)):
@@ -44,6 +48,16 @@ async def main() -> int:
         # 2. Draft shows via admin list
         admin_out = await s.news_list(s.ListNewsInput(status=s.Status.DRAFT, isFirstParty=True, limit=200))
         failures += not check("draft visible via news_list (admin)", item_id in admin_out or test_title in admin_out)
+
+        # 2b. internalUrl persisted on create (news_get reads it back from the API)
+        got = await s.news_get(s.GetNewsInput(id=item_id))
+        failures += not check("internalUrl persisted by POST", internal_url_v1 in got, got[:200])
+
+        # 2c. internalUrl updatable via PATCH
+        out = await s.news_update(s.UpdateNewsInput(id=item_id, internalUrl=internal_url_v2))
+        failures += not check("news_update internalUrl", "updated" in out.lower(), out[:120])
+        got = await s.news_get(s.GetNewsInput(id=item_id))
+        failures += not check("internalUrl persisted by PATCH", internal_url_v2 in got, got[:200])
 
         # 3. Draft NOT on public feed
         async with httpx.AsyncClient(timeout=30) as c:
