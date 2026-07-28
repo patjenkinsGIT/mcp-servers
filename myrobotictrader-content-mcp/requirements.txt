@@ -1,4 +1,4 @@
-mcp[cli]>=1.2.0
+mcp[cli]>=1.2.0,<2
 pydantic>=2.0.0
 uvicorn
 httpx
