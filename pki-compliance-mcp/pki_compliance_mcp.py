@@ -208,6 +208,10 @@ DEADLINES = [
         "isMajor": True,
         "impact": "DigiCert customers on legacy roots must ensure new and reissued TLS certificates chain to Global Root G2 (RSA) or G3 (ECC) to remain Chrome-trusted.",
         "is_estimated": False,
+        "consequences": {
+            "enforcement": "Chrome removes DigiCert Trusted Root G4, Assured ID G2 and Assured ID G3 from its trust store: TLS certificates issued on or after 2026-07-01 from these hierarchies are not Chrome-trusted, while certificates issued before remain trusted until they expire. New and reissued certificates must chain to DigiCert Global Root G2 (RSA) or G3 (ECC).",
+            "scenario": "The break shows up at reissue, not on the deadline date. A DigiCert customer reissues in August 2026, the certificate is perfectly valid, monitoring stays green, and Chrome throws a full-page interstitial because the chain still climbs to Assured ID G2. Anything holding the legacy roots — load balancer chain files, appliance trust stores, pinned mobile clients — needs the Global Root G2/G3 chain staged before its first post-July reissue.",
+        },
     },
     {
         "id": "mozilla-dcr-audit-periods",
@@ -289,6 +293,10 @@ DEADLINES = [
         "isMajor": True,
         "impact": "CAs in the Mozilla root program must begin aligning CP/CPS documentation and audit practices with new v3.1 requirements.",
         "is_estimated": False,
+        "consequences": {
+            "enforcement": "MRSP v3.1 applies from 2026-07-01: Mozilla accepts root inclusion requests only for root CA key pairs generated no more than five years before submission, and Section 3.3's CP/CPS content and quality requirements tighten (full compliance due 2027-07-01).",
+            "scenario": "No action unless you operate a CA. The knock-on effect for enterprises is a helpful one: CP/CPS documents move to versioned, publicly hosted, RFC 3647-structured text, which makes them far easier to cite in a vendor review than the PDFs most CAs publish today.",
+        },
     },
     {
         "id": "mozilla-cpcps-content-compliance-deadline",
@@ -326,6 +334,10 @@ DEADLINES = [
         "category": "certificates",
         "isMajor": True,
         "impact": "CAs must lint all certs before signing",
+        "consequences": {
+            "enforcement": "SC-075 requires publicly-trusted CAs to run a linting process against the certificate before signing it, so technical non-conformity is caught before issuance rather than after.",
+            "scenario": "No action unless you operate a CA. What changes for enterprises is the failure mode: a malformed request that a CA would once have signed now comes back as a rejected order. If an internal tool assembles CSRs by hand — odd SANs, a stray OU, an unqualified name — expect issuance to start failing on requests that used to work, with the rejection arriving from the CA rather than from your own tooling.",
+        },
     },
     {
         "id": "multi-perspective-validation",
@@ -337,6 +349,10 @@ DEADLINES = [
         "category": "validation",
         "isMajor": True,
         "impact": "Prevents BGP hijacking attacks",
+        "consequences": {
+            "enforcement": "SC-067v3 requires CAs to corroborate domain validation and CAA checks from multiple network perspectives before issuance, for the affected methods in TLS BR sections 3.2.2.4 and 3.2.2.5.",
+            "scenario": "No action unless you operate a CA, but it changes how validation failures look. The challenge now has to succeed from several vantage points, so split-horizon DNS, geo-fenced WAF rules, or a firewall that only allows the CA's primary validator can fail an order with no error visible on your side. If ACME orders start failing intermittently, check that the challenge is reachable from everywhere — not just from your own network.",
+        },
     },
     {
         "id": "chrome-clientauth-ica",
@@ -400,6 +416,10 @@ DEADLINES = [
         "category": "certificates",
         "isMajor": True,
         "impact": "All code signing certificate renewals must comply with 460-day maximum",
+        "consequences": {
+            "enforcement": "Ballot CSC-31 reduces the maximum validity of publicly-trusted code signing certificates from 39 months to 460 days, effective 2026-03-01.",
+            "scenario": "Code signing renewal goes from a roughly three-year event to an annual one, and each cycle on an HSM-backed or token-based key means re-attesting, re-keying, and updating every build agent that holds the credential. A pipeline signing with a certificate nobody has rotated since 2023 fails its first release after expiry, usually inside a release window. Already-timestamped signatures keep validating.",
+        },
     },
     {
         "id": "validity-200-days",
@@ -411,6 +431,10 @@ DEADLINES = [
         "category": "certificates",
         "isMajor": True,
         "impact": "Plan automation NOW",
+        "consequences": {
+            "enforcement": "Per SC-081v3, the TLS Baseline Requirements cap subscriber certificate validity at 200 days for certificates issued from 2026-03-15 to 2027-03-14 and cut domain/IP validation data reuse to 200 days; Subject Identity Information reuse drops to 398 days on the same date.",
+            "scenario": "A team that renews annually now renews roughly twice a year, and the DCV reuse cut means the domain-control check can no longer ride on last year's validation. Manual processes built around an annual calendar reminder start missing. This is the step where ACME automation stops being optional for anything beyond a handful of certificates — and it tightens again to 100 days in March 2027 and 47 days in March 2029.",
+        },
     },
     {
         "id": "sii-reuse-398-days",
@@ -560,6 +584,10 @@ DEADLINES = [
         "framework_id": None,  # Secure Boot isn't a CA/B Forum thing; suppress the source=microsoft → cabforum default
         "framework_name": "Microsoft Root Program",
         "jurisdiction": "global",
+        "consequences": {
+            "enforcement": "Rolling expiry of the 2011-era Secure Boot certificates begins June 2026. Microsoft states devices without the 2023 certificates continue to start and operate normally and keep receiving standard Windows updates, but can no longer receive updates to Windows Boot Manager, the Secure Boot databases, revocation lists, or mitigations for newly discovered boot-level vulnerabilities.",
+            "scenario": "Nothing breaks on the date, which is exactly the risk — the fleet keeps booting and the gap never shows up on a dashboard. Months later a boot-level vulnerability gets a revocation-list entry these devices cannot receive, and BitLocker hardening and third-party bootloader scenarios start behaving differently across the estate. Air-gapped systems and Windows 10 machines are the ones that quietly miss the 2023 certificate rollout.",
+        },
     },
     {
         "id": "sc097-sha1-ca-crl-sunset",
@@ -705,7 +733,11 @@ DEADLINES = [
         "source_url": "https://wiki.mozilla.org/CA/Mass_Revocation_Events",
         "category": "revocation",
         "isMajor": True,
-        "impact": "CAs without documented procedures may face removal from Mozilla root store."
+        "impact": "CAs without documented procedures may face removal from Mozilla root store.",
+        "consequences": {
+            "enforcement": "MRSP section 6.1.3: every CA operator capable of issuing TLS server certificates must have a comprehensive Mass Revocation Plan in place no later than 2025-09-01, covering activation criteria, current subscriber contact data, automation, timelines, annual testing, and an independent third-party assessment.",
+            "scenario": "No action unless you operate a CA — but this is the plan that gets run against you. In a mass revocation your certificates are replaced on the CA's timetable (24 hours or 5 days under the Baseline Requirements), not yours. The enterprise-side questions are whether your CA holds current contact details for the team that would have to act, and whether you could actually reissue everything inside that window. Both are worth testing before a real event.",
+        },
     },
     {
         "id": "mozilla-mass-revocation-assessment",
@@ -739,7 +771,11 @@ DEADLINES = [
         "source_url": "https://security.googleblog.com/2024/06/sustaining-digital-certificate-security.html",
         "category": "certificates",
         "isMajor": True,
-        "impact": "Certificates from Entrust CAs will show security warnings in Chrome."
+        "impact": "Certificates from Entrust CAs will show security warnings in Chrome.",
+        "consequences": {
+            "enforcement": "Chrome blocks TLS server authentication certificates chaining to the listed Entrust and AffirmTrust roots whose earliest Signed Certificate Timestamp is dated after 2024-11-11 23:59:59 UTC; certificates with an earlier SCT stay trusted until they expire. Chrome's guidance is to move to a different publicly-trusted CA.",
+            "scenario": "Anything still issued from an Entrust public root fails in Chrome the moment it is renewed. The trap is the long-lived certificate issued just before the cutoff: it works today and dies on renewal day, so the outage lands whenever the automation or the calendar reminder fires — not on a date anyone planned around.",
+        },
     },
     {
         "id": "apple-entrust-distrust",
@@ -751,7 +787,11 @@ DEADLINES = [
         "source_url": "https://support.apple.com/en-us/121668",
         "category": "certificates",
         "isMajor": True,
-        "impact": "Certificates from Entrust CAs will not be trusted on macOS/iOS."
+        "impact": "Certificates from Entrust CAs will not be trusted on macOS/iOS.",
+        "consequences": {
+            "enforcement": "Apple blocked the Entrust and AffirmTrust roots — including Entrust Root Certification Authority, G2, G4, EC1 and Entrust.net Certification Authority (2048) — on Apple platforms effective 2024-11-15, across TLS, S/MIME and timestamping uses.",
+            "scenario": "Same migration as the Chrome distrust, wider blast radius. It is not just Safari: every app on macOS and iOS that uses the system trust store is affected, including background API clients that show no user-facing warning and simply start failing TLS. If a mobile app or any Apple-platform integration still terminates on an Entrust-issued certificate, it needs a different CA.",
+        },
     },
     {
         "id": "mozilla-entrust-distrust",
@@ -763,7 +803,11 @@ DEADLINES = [
         "source_url": "https://groups.google.com/a/mozilla.org/g/dev-security-policy/c/jCvkhBjg9Yw",
         "category": "certificates",
         "isMajor": True,
-        "impact": "Certificates from Entrust CAs will show security warnings in Firefox."
+        "impact": "Certificates from Entrust CAs will show security warnings in Firefox.",
+        "consequences": {
+            "enforcement": "Mozilla set TLS distrust-after dates on the Entrust roots in its root store: certificates issued after 2024-11-30 are not trusted by Firefox. Mozilla's stated reason was that Entrust's remediation plan was not sufficient to restore confidence in its operation.",
+            "scenario": "Firefox is the browser nobody tests, so this one surfaces as a single support ticket rather than an alert. The rule is the same as for Chrome and Apple: any remaining Entrust public TLS certificate has to be replaced from a different CA at its next renewal, not left to run to expiry.",
+        },
     },
     {
         "id": "microsoft-entrust-distrust",
@@ -775,7 +819,11 @@ DEADLINES = [
         "source_url": "https://learn.microsoft.com/en-us/security/trusted-root/2025/february-2025",
         "category": "certificates",
         "isMajor": True,
-        "impact": "Certificates from Entrust CAs will not be trusted in Windows/Edge."
+        "impact": "Certificates from Entrust CAs will not be trusted in Windows/Edge.",
+        "consequences": {
+            "enforcement": "Microsoft's February 2025 Trusted Root Program release set a NotBefore date of 2025-04-16 on the Entrust and AffirmTrust roots — only certificates issued after that date are distrusted on Windows, and earlier certificates continue to validate.",
+            "scenario": "This is the distrust that hits server-to-server traffic rather than browsers. A .NET or PowerShell client on Windows calling an Entrust-issued endpoint renewed after April 2025 throws a chain-validation error while the same endpoint works fine from Linux, which sends the investigation down the wrong path. Worth checking for Entrust certificates on internal endpoints that Windows hosts call.",
+        },
     },
     # 2026-07-21 blind-window review: entries below recovered from the ~9 months
     # the Microsoft source pointed at a dead learn.microsoft.com page.
@@ -820,6 +868,10 @@ DEADLINES = [
         "category": "pqc",
         "isMajor": True,
         "impact": "Start inventory and planning now",
+        "consequences": {
+            "enforcement": "FIPS 203 (ML-KEM), FIPS 204 (ML-DSA) and FIPS 205 (SLH-DSA) are final federal standards. Publication carries no compliance deadline of its own; NIST's guidance is to start integrating them immediately because full integration takes time. Binding dates come from separate mandates such as CNSA 2.0 and EO 14412 / OMB M-26-15.",
+            "scenario": "Nothing fails on this date — the cost of ignoring it is paid later. Harvest-now-decrypt-later means traffic captured today becomes readable once a cryptographically relevant quantum computer exists, so long-lived confidential data protected only by RSA or ECDH key exchange is already exposed. The first practical step is a cryptographic inventory: where RSA and ECC are used, and which of those uses sit in hardware or vendor products you cannot change quickly.",
+        },
     },
     {
         "id": "microsoft-pqc-tls-pilot",
@@ -1244,7 +1296,11 @@ REGULATORY_FRAMEWORKS = [
                 "category": "effective",
                 "impact": "All EU financial entities must comply with DORA's ICT risk management, incident reporting, and third-party risk requirements - no transitional period.",
                 "isMajor": True,
-                "description": "Regulation now applies to all EU financial entities. No transitional period."
+                "description": "Regulation now applies to all EU financial entities. No transitional period.",
+                "consequences": {
+                    "enforcement": "DORA applies directly to in-scope EU financial entities from 2025-01-17 with no transitional period. Competent authorities supervise compliance and must be equipped with supervisory, investigatory and sanctioning powers, including remedial measures and administrative penalties (Article 50).",
+                    "scenario": "The certificate angle sits in the ICT risk-management and third-party chapters: your public CA is an ICT third-party provider, and an expired certificate that takes a customer-facing service down is an ICT-related incident with reporting obligations attached. Teams that cannot produce a current certificate inventory, name the CAs behind it, and show tested renewal and revocation procedures are the ones that struggle in the first supervisory conversation.",
+                },
             },
             {
                 "id": "dora-roi-submission",
@@ -1254,7 +1310,11 @@ REGULATORY_FRAMEWORKS = [
                 "category": "reporting",
                 "impact": "Financial entities must have their Registers of Information on ICT third-party arrangements complete and submitted through national competent authorities.",
                 "isMajor": True,
-                "description": "National competent authorities submit Registers of Information on ICT third-party arrangements to ESAs."
+                "description": "National competent authorities submit Registers of Information on ICT third-party arrangements to ESAs.",
+                "consequences": {
+                    "enforcement": "Under the ESAs' roadmap, competent authorities had to submit financial entities' Registers of Information on ICT third-party arrangements to the ESAs by 2025-04-30 — meaning entities' own national deadlines fell earlier. Those registers are the input for designating critical ICT third-party providers.",
+                    "scenario": "The register must name every ICT third-party arrangement, and certificate services are the easiest ones to leave out: the public CA, the certificate lifecycle platform, an HSM-as-a-service provider, an ACME endpoint fronted by a CDN. An incomplete register only reveals itself when a supervisor asks who issues your certificates and the answer is not in the file.",
+                },
             },
             {
                 "id": "dora-ctpp-designation",
@@ -1264,7 +1324,11 @@ REGULATORY_FRAMEWORKS = [
                 "category": "oversight",
                 "impact": "Designated CTPPs come under direct ESA oversight; financial entities should verify which of their ICT providers are designated.",
                 "isMajor": True,
-                "description": "ESAs notify ICT third-party service providers of their classification as Critical Third-Party Providers."
+                "description": "ESAs notify ICT third-party service providers of their classification as Critical Third-Party Providers.",
+                "consequences": {
+                    "enforcement": "After the register submissions, the ESAs notify ICT third-party providers of their designation as Critical Third-Party Providers, followed by a six-week objection period. Designated CTPPs come under direct ESA oversight through a Lead Overseer.",
+                    "scenario": "For a certificate team the practical step is checking whether anything in your certificate chain — the CA, the CLM vendor, the cloud platform hosting your PKI — appears on the designated list. Designation does not transfer any of your own obligations, but it changes the leverage in the vendor conversation; where a provider is not designated, your contract terms and exit plan are doing all the work.",
+                },
             },
             {
                 "id": "dora-ec-review",
@@ -1284,7 +1348,11 @@ REGULATORY_FRAMEWORKS = [
                 "category": "reporting",
                 "impact": "Annual RoI submission is now a recurring 31 March obligation; regulators expect more mature ICT third-party documentation than the first cycle.",
                 "isMajor": True,
-                "description": "Second annual Register of Information submission. From 2026 onwards, competent authorities submit RoIs to the ESAs by 31 March each year (per EBA DORA reporting FAQ). Regulators expect more mature submissions with detailed ICT third-party documentation."
+                "description": "Second annual Register of Information submission. From 2026 onwards, competent authorities submit RoIs to the ESAs by 31 March each year (per EBA DORA reporting FAQ). Regulators expect more mature submissions with detailed ICT third-party documentation.",
+                "consequences": {
+                    "enforcement": "From 2026 onwards competent authorities submit Registers of Information to the ESAs by 31 March each year, with 31 December of the preceding year as the reference date. Each competent authority sets an earlier national deadline for financial entities to report to it.",
+                    "scenario": "The second cycle is read against a higher bar than the first, and the 31 December reference date is what catches people out: the register has to reflect arrangements as they stood at year end, not as they stand when someone assembles the file in March. Switch CAs in January and the old provider still has to appear, in its December state.",
+                },
             },
             {
                 "id": "dora-ctpp-eu-subsidiary-window",
@@ -1319,7 +1387,11 @@ REGULATORY_FRAMEWORKS = [
                 "impact": "NIS2 obligations begin applying as member states transpose; entities in scope must track their national implementation timelines.",
                 "isMajor": True,
                 "description": "Member states required to transpose NIS2 into national law. 23 states missed deadline; EC opened infringement proceedings.",
-                "jurisdiction_detail": "EU"
+                "jurisdiction_detail": "EU",
+                "consequences": {
+                    "enforcement": "Member states were required to transpose NIS2 into national law by 2024-10-17. Obligations bite through national law, and the directive sets maximum administrative fines of at least EUR 10 million or 2% of total worldwide annual turnover (whichever is higher) for essential entities, and at least EUR 7 million or 1.4% for important entities.",
+                    "scenario": "Because 23 member states missed the deadline, the real problem is jurisdictional rather than technical. A group operating across the EU faces different in-force dates, different registration portals and different national deadlines for the same directive, so a single group-wide compliance date does not exist. Certificate-relevant duties — encryption, supply-chain security, incident notification when an expired certificate causes an outage — have to be tracked per country, per entity.",
+                },
             },
             {
                 "id": "nis2-germany-bsi",
@@ -1331,7 +1403,11 @@ REGULATORY_FRAMEWORKS = [
                 "impact": "Entities in scope in Germany become subject to the amended BSI Act's registration, security, and reporting obligations.",
                 "isMajor": True,
                 "description": "German NIS2 implementation via amended BSI Act enters into force.",
-                "jurisdiction_detail": "Germany"
+                "jurisdiction_detail": "Germany",
+                "consequences": {
+                    "enforcement": "Germany's NIS2 implementation act (BGBl. I 2025 Nr. 301, promulgated 2025-12-05) brings the amended BSI Act into force, making registration, risk-management and incident-reporting duties applicable to in-scope German entities under BSI supervision.",
+                    "scenario": "Scope is self-assessed, which is where German entities get caught: nobody writes to tell you that you are in scope. A mid-sized manufacturer or logistics operator that clears the size and sector thresholds is subject to the duties whether or not it has worked that out, and the three-month registration clock runs from the date it became in scope — not from the date someone noticed.",
+                },
             },
             {
                 "id": "nis2-eu-cyclone",
@@ -1353,7 +1429,11 @@ REGULATORY_FRAMEWORKS = [
                 "impact": "In-scope entities must complete BSI registration; missing the three-month window is itself a violation.",
                 "isMajor": True,
                 "description": "Entities must register with Federal Office for Information Security (BSI) within 3 months of BSI Act entering force.",
-                "jurisdiction_detail": "Germany"
+                "jurisdiction_detail": "Germany",
+                "consequences": {
+                    "enforcement": "In-scope entities must register with the BSI within three months of first becoming subject to NIS2, through a two-step process — Mein Unternehmenskonto, then the BSI portal — submitting name, address, legal form, sector, contacts, headcount and turnover.",
+                    "scenario": "Registration is the cheapest obligation in the regime and the easiest to miss, because it is an administrative task with no natural technical owner. It falls between IT, legal and the company secretary until the window has already closed — and being unregistered is a standalone, visible breach regardless of how good the underlying security actually is.",
+                },
             },
             {
                 "id": "nis2-italy-audit",
@@ -1364,7 +1444,11 @@ REGULATORY_FRAMEWORKS = [
                 "impact": "Italian in-scope entities must be able to demonstrate NIS2 compliance in the first audit cycle.",
                 "isMajor": True,
                 "description": "Deadline for first audit verifying NIS2 compliance (moved from Dec 31, 2025).",
-                "jurisdiction_detail": "Italy"
+                "jurisdiction_detail": "Italy",
+                "consequences": {
+                    "enforcement": "Article 30(1) of the Italian NIS decree requires essential and important entities to communicate and update their list of activities and services, with relevance categories, on the ACN platform between 1 May and 30 June each year. ACN may then verify submissions on a sample basis, including by comparison against similar entities.",
+                    "scenario": "The categorization gets treated as a form-filling exercise and done in late June by whoever holds the portal login. Because ACN can challenge it afterwards, the exposure is a category you cannot justify — keep the criteria, sources and people involved on record. The same file is what you reuse for next year's window and for any ACN follow-up.",
+                },
             },
             {
                 "id": "nis2-luxembourg-registration",
@@ -1375,7 +1459,11 @@ REGULATORY_FRAMEWORKS = [
                 "impact": "In-scope Luxembourg entities must self-register with the ILR; non-registration is itself a sanctionable breach.",
                 "isMajor": True,
                 "description": "Entities in scope of Luxembourg's NIS2 law (in force 10 May 2026) must self-register with the ILR by 10 July 2026 (Article 11). Non-registration is itself a sanctionable breach.",
-                "jurisdiction_detail": "Luxembourg"
+                "jurisdiction_detail": "Luxembourg",
+                "consequences": {
+                    "enforcement": "Article 11 of the Luxembourg law of 5 May 2026 (in force 10 May 2026) requires in-scope entities to self-register with the ILR within two months of entry into force — by 2026-07-10 — providing name, contact details, sector and sub-sector, the member states where they provide services, and their size.",
+                    "scenario": "Self-registration means the ILR will not come and find you; if the entity clears the thresholds and nobody files, the failure stays silent until it is a sanction. Luxembourg's fund-administration and ICT-services population is full of entities assuming a group filing elsewhere covers them. It does not — registration is per entity, per member state.",
+                },
             },
             {
                 "id": "nis2-austria-effective",
@@ -1386,7 +1474,11 @@ REGULATORY_FRAMEWORKS = [
                 "impact": "Austrian in-scope entities must fully comply with the Network and Information System Security Act 2026, including security measures and reporting duties.",
                 "isMajor": True,
                 "description": "Network and Information System Security Act 2026 fully applicable.",
-                "jurisdiction_detail": "Austria"
+                "jurisdiction_detail": "Austria",
+                "consequences": {
+                    "enforcement": "The Netz- und Informationssystemsicherheitsgesetz 2026 (NISG 2026) becomes fully applicable on 2026-10-01, when risk-management and incident-reporting duties start applying to roughly 4,000 in-scope Austrian entities. Registration follows within three months, and a self-declaration on implemented risk-management measures within twelve months.",
+                    "scenario": "The twelve-month self-declaration is what should shape the work now: whatever measures you declare in autumn 2027 have to actually exist. For a certificate team that means a real inventory, named renewal owners, and evidence that revocation has been exercised rather than merely documented. Entities treating 1 October as the start of a planning phase rather than a compliance date run out of runway.",
+                },
             },
             {
                 "id": "nis2-italy-security",
@@ -1398,7 +1490,11 @@ REGULATORY_FRAMEWORKS = [
                 "isMajor": True,
                 "description": "ACN technical annexes establishing minimum security requirements become effective (ACN states October 2026; 18 months from April 2025 list consolidation).",
                 "jurisdiction_detail": "Italy",
-                "is_estimated": True
+                "is_estimated": True,
+                "consequences": {
+                    "enforcement": "ACN Determination 379907/2025 sets the base security measures: important entities implement Annex 1 and essential entities Annex 2 within 18 months of notice of inclusion on the national NIS list, with ACN stating October 2026 as the implementation deadline.",
+                    "scenario": "The annexes are explicit about cryptography and certificate handling, so this is the point where an Italian in-scope entity has to show more than intent: an inventory of certificates, named owners, and renewal and revocation procedures somebody has actually run. Eighteen months sounds generous until you reach the certificates sitting on appliances nobody has admin credentials for.",
+                },
             },
             {
                 "id": "nis2-eu-cyclone-2027",
@@ -1483,7 +1579,11 @@ REGULATORY_FRAMEWORKS = [
                 "impact": "Once the bill becomes law, secondary legislation and enforcement timelines start; in-scope organizations should begin gap assessments.",
                 "isMajor": True,
                 "description": "Bill was carried over and reintroduced May 2026; passed Commons third reading 16 Jun 2026; Lords second reading completed 14 Jul 2026. The bill now proceeds to Committee stage in the Lords, where a transnational repression amendment is expected from Lord Alton of Liverpool - it would bar sharing private information with overseas authorities in jurisdictions that cannot guarantee the right to a fair trial, and was voted down in the Commons. Legislative stage only; no new date-certain. Royal Assent still expected late 2026.",
-                "is_estimated": True
+                "is_estimated": True,
+                "consequences": {
+                    "enforcement": "Royal Assent makes the bill law but creates no immediate duties. The bill amends the Network and Information Systems Regulations 2018 to widen scope and update incident-reporting duties, and confers powers on the Secretary of State; substantive requirements follow in secondary legislation. As of July 2026 the bill is in the Lords, with committee stage scheduled for 1 September 2026 and no Royal Assent date set.",
+                    "scenario": "Nothing to comply with on the day. The useful work while the bill is in the Lords is a scope check — managed service providers and data centre operators are the newly captured populations — and a gap assessment against the existing NIS Regulations, because the phased duties arriving through 2027 will assume a certificate inventory and an incident-reporting capability that you either have or do not.",
+                },
             },
             {
                 "id": "uk-csr-implementation",
