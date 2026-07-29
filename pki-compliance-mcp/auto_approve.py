@@ -10,8 +10,9 @@ Per run:
      new_deadlines / updated_deadlines / document_version_updates /
      regulatory_updates / needs_human_review).
   2. Classifies each item AUTO / REVIEW / SKIP (see criteria below).
-  3. Preflight: repo working tree clean AND `git push --dry-run` succeeds.
-     If either fails, EVERYTHING queues for review — fail-safe by default.
+  3. Preflight: repo working tree clean, clone fast-forwarded onto origin/main,
+     AND `git push --dry-run` succeeds. If any fails, EVERYTHING queues for
+     review — fail-safe by default.
   4. Backs up pki_compliance_mcp.py to ~/.pki-compliance-mcp/backups/, patches
      the source, py_compiles it, runs both offline test suites. Any failure:
      restore backup, queue everything.
@@ -250,6 +251,14 @@ def preflight(repo: str) -> str | None:
     r = run(["git", "status", "--porcelain", "--", "pki_compliance_mcp.py"], cwd=repo)
     if r.returncode != 0 or r.stdout.strip():
         return "repo working tree not clean"
+    # Recover from a clone that is merely behind origin (e.g. someone pushed
+    # from a laptop since the last run). Without this the push --dry-run below
+    # fails and a perfectly appliable item gets queued for no reason. --ff-only
+    # so a genuinely diverged clone still aborts rather than auto-merging.
+    r = run(["git", "pull", "--ff-only", "origin", "main"], cwd=repo)
+    if r.returncode != 0:
+        detail = (r.stderr or r.stdout or "").strip().splitlines()
+        return f"cannot fast-forward onto origin/main: {detail[-1] if detail else 'unknown'}"
     r = run(["git", "push", "--dry-run", "origin", "main"], cwd=repo)
     if r.returncode != 0:
         return f"git push unavailable: {(r.stderr or '').strip().splitlines()[-1] if r.stderr else 'unknown'}"

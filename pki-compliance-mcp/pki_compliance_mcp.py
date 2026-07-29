@@ -1472,7 +1472,7 @@ REGULATORY_FRAMEWORKS = [
                 "category": "legislative",
                 "impact": "No obligations yet - legislative milestone only; Royal Assent moves closer.",
                 "isMajor": False,
-                "description": "Bill passed the House of Commons (third reading 16 Jun 2026) and had its first reading in the House of Lords on 17 June 2026. Lords second reading scheduled 14 July 2026."
+                "description": "Bill passed the House of Commons (third reading 16 Jun 2026) and had its first reading in the House of Lords on 17 June 2026. Lords second reading completed 14 July 2026."
             },
             {
                 "id": "uk-csr-royal-assent",
@@ -1482,7 +1482,7 @@ REGULATORY_FRAMEWORKS = [
                 "category": "legislative",
                 "impact": "Once the bill becomes law, secondary legislation and enforcement timelines start; in-scope organizations should begin gap assessments.",
                 "isMajor": True,
-                "description": "Bill was carried over and reintroduced May 2026; passed Commons third reading 16 Jun 2026; Lords second reading scheduled 14 Jul 2026. Royal Assent now expected late 2026.",
+                "description": "Bill was carried over and reintroduced May 2026; passed Commons third reading 16 Jun 2026; Lords second reading completed 14 Jul 2026. The bill now proceeds to Committee stage in the Lords, where a transnational repression amendment is expected from Lord Alton of Liverpool - it would bar sharing private information with overseas authorities in jurisdictions that cannot guarantee the right to a fair trial, and was voted down in the Commons. Legislative stage only; no new date-certain. Royal Assent still expected late 2026.",
                 "is_estimated": True
             },
             {
@@ -2363,8 +2363,8 @@ RELATED_RFCS = [
 
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
-    "lastUpdated": "2026-07-21",
-    "dataVersion": "2.4.9",
+    "lastUpdated": "2026-07-29",
+    "dataVersion": "2.4.10",
     "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program Requirements v1.2, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
@@ -2383,11 +2383,11 @@ COMPLIANCE_METADATA = {
 }
 
 DATA_FRESHNESS = {
-    "lastFullReview": "2026-07-21",
-    "nextReviewDue": "2026-08-20",
+    "lastFullReview": "2026-07-29",
+    "nextReviewDue": "2026-08-28",
     "reviewIntervalDays": 30,
     "fieldVerifications": {
-        "deadlines": {"verified": "2026-07-21", "source": "2026-07-21 Microsoft TRP blind-window review (Oct 2025-Jul 2026): added microsoft-april-2026-ctl-notbefore (NotBefore 2026-05-19, verified against trusted-root/2026/april-2026.md), microsoft-trp-single-purpose-roots (2026-07-01, Requirements.md v1.2 sections 3.1.8/3.4.3), microsoft-pqc-tls-pilot (2026-06-08, PQC Pilot Program.md V1.0). SC0101v2 (IPR ~Aug 6) and SMC017v2 (IPR ~Jul 30) remain held. Prior review 2026-07-13"},
+        "deadlines": {"verified": "2026-07-29", "source": "2026-07-29 review: uk-csr-lords-stage and uk-csr-royal-assent advanced from 'second reading scheduled' to 'completed 14 Jul 2026, now at Committee stage' (legislative stage only, no new date-certain; Royal Assent estimate unchanged at 2026-12-31). SMC017v2 REMAINS HELD - the ballot's own Review Notice gives the IPR period as 2026-06-30 20:00 UTC to 2026-07-30 20:00 UTC, i.e. the clock runs from the Review Notice, NOT from the 2026-06-16 vote; do not re-derive it as vote+30d. Both SMC017v2 deadlines (Root/Sub CA RSA 4096 from 2026-09-15; no Subscriber issuance from sub-3072-bit Sub-CAs from 2027-09-15) are drafted and blocked on that window closing; earliest safe add 2026-07-31. SC0101v2 (IPR ~Aug 6) also still held. Prior review 2026-07-21 (Microsoft TRP blind-window)"},
         "rootStores": {"verified": "2026-07-21", "source": "Individual root program policies. 2026-07-21: Microsoft source repointed to github.com/TrustedRootProgram/Program-Requirements (official since Oct 2025; superseded learn.microsoft.com page was monitored dead ~9 months) and converted from manual check to commits.atom feed. Blind-window review same day: Microsoft framework entry updated to Requirements v1.2 (single-purpose roots, 10-yr validity, incident reporting, CTLM) with April/June 2026 CTL actions."},
         "algorithmRequirements": {"verified": "2026-05-14", "source": "CA/B Forum TLS BR 2.2.6, NIST FIPS 203/204/205, NIST SP 800-131A Rev 3"},
         "caChains": {"verified": "2026-05-14", "source": "Official CA documentation"},
