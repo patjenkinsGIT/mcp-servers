@@ -152,13 +152,22 @@ def outstanding_review_items(date_str: str, days: int = 14) -> list[dict]:
                      or (it.get("description") or it.get("reason") or "")[:80])
             if not title:
                 continue
-            seen.setdefault(("flag", rsig), {
+            entry = seen.setdefault(("flag", rsig), {
                 "kind": "flagged",
                 "title": title,
                 "date": "",
                 "first_seen": ds,
                 "urgent": bool(it.get("urgent")),
+                "provenance_urls": [],
             })
+            # setdefault keeps the earliest sighting (that's the first_seen we
+            # want), but provenance may only appear on a later re-flag — an item
+            # first raised before 2026-07-29 has none at all. Backfill so the
+            # operator gets a link as soon as any run supplies one.
+            if not entry.get("provenance_urls"):
+                entry["provenance_urls"] = [
+                    u for u in (it.get("provenance_urls") or []) if isinstance(u, str)
+                ][:3]
     return sorted((v for k, v in seen.items() if k not in rejected_sigs),
                   key=lambda x: (not x["urgent"], x["first_seen"]))
 
@@ -436,13 +445,22 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
         parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>Flagged for human review</h3>")
         parts.append("<ul style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding-left:20px'>")
         for item in pending["needs_human_review"]:
+            srcs = []
             if isinstance(item, dict):
                 iid = item.get("id") or ""
                 desc = item.get("description") or item.get("item") or item.get("reason") or json.dumps(item)
                 label = f"{iid}: {desc}" if iid else desc
+                srcs = [u for u in (item.get("provenance_urls") or []) if isinstance(u, str)]
             else:
                 label = str(item)
-            parts.append(f"<li>{escape(label[:300])}</li>")
+            src_part = ""
+            if srcs:
+                links = ", ".join(
+                    f"<a href='{escape(u, quote=True)}' style='color:#2563eb'>source {n}</a>"
+                    for n, u in enumerate(srcs, 1)
+                )
+                src_part = f"<br><span style='color:#64748b'>↳ {links}</span>"
+            parts.append(f"<li>{escape(label[:300])}{src_part}</li>")
         parts.append("</ul>")
 
     # Doc URL change detail (when there are any)
@@ -464,7 +482,13 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
         for o in outstanding:
             urgent_tag = "🚨 " if o.get("urgent") else ""
             date_part = f" <em>({escape(o['date'])})</em>" if o.get("date") else ""
-            parts.append(f"<li>{urgent_tag}<strong>[{escape(o['kind'])}]</strong> {escape(o['title'][:200])}{date_part} — first seen {escape(o['first_seen'])}</li>")
+            srcs = "".join(
+                f"<a href='{escape(u, quote=True)}' style='color:#2563eb'>source {n}</a>"
+                + ("" if n == len(o["provenance_urls"]) else ", ")
+                for n, u in enumerate(o.get("provenance_urls") or [], 1)
+            )
+            src_part = f"<br><span style='color:#64748b'>↳ {srcs}</span>" if srcs else ""
+            parts.append(f"<li>{urgent_tag}<strong>[{escape(o['kind'])}]</strong> {escape(o['title'][:200])}{date_part} — first seen {escape(o['first_seen'])}{src_part}</li>")
         parts.append("</ul>")
     elif outstanding is not None:
         parts.append("<p style='font:13px/1.4 -apple-system,system-ui,sans-serif;color:#15803d'>✓ No outstanding review items from the last 14 days.</p>")
@@ -516,6 +540,8 @@ def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refre
         for o in outstanding:
             tag = "URGENT " if o.get("urgent") else ""
             lines.append(f"  - {tag}[{o['kind']}] {o['title'][:120]} (first seen {o['first_seen']})")
+            for u in (o.get("provenance_urls") or []):
+                lines.append(f"      source: {u}")
     lines.append("")
     lines.append(f"10:00 UTC research cron: {'ran' if auto_refresh.get('ran') else 'DID NOT RUN'}")
     lines.append(f"10:30 UTC doc-check cron: {'ran' if doc_check.get('ran') else 'DID NOT RUN'}")

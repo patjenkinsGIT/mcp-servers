@@ -141,10 +141,54 @@ def research(prompt: str, max_retries: int = 3) -> str:
             continue
         response.raise_for_status()
         data = response.json()
-        return "\n".join(
+        text = "\n".join(
             block["text"] for block in data["content"] if block["type"] == "text"
         )
+        return text + _sources_section(data["content"])
     raise RuntimeError(f"Rate limited or timed out after {max_retries} retries")
+
+
+def _sources_section(blocks: list) -> str:
+    """Render the URLs the search actually returned as an appendix to the text.
+
+    Provenance retention: the model's prose rarely names its sources, and text
+    blocks come back with no `citations` array, so the URLs exist ONLY in the
+    web_search_tool_result blocks. Dropping them (as this function's caller did
+    until 2026-07-29) is why regulatory findings kept arriving as NEEDS-SOURCE:
+    the diff model was never shown a URL it could cite, so every such item had
+    to be researched again by hand from a blank search.
+
+    `content` is a list of results on success but a bare dict on failure
+    (e.g. {"type": "web_search_tool_result_error", "error_code": "unavailable"}),
+    so branch on the type before iterating. `encrypted_content` is deliberately
+    dropped — it is opaque to us and would balloon the prompt.
+    """
+    seen, sources, errors = set(), [], []
+    for block in blocks:
+        if block.get("type") != "web_search_tool_result":
+            continue
+        content = block.get("content")
+        if isinstance(content, dict):
+            errors.append(content.get("error_code", "unknown"))
+            continue
+        if not isinstance(content, list):
+            continue
+        for result in content:
+            url = (result or {}).get("url")
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            title = (result.get("title") or "").strip()
+            age = (result.get("page_age") or "").strip()
+            sources.append(f"- {url}{f' — {title}' if title else ''}{f' (page age: {age})' if age else ''}")
+    out = ""
+    if sources:
+        out += ("\n\n=== SOURCES CONSULTED ===\nURLs returned by web search for this query. "
+                "Cite these in provenance_urls; do NOT invent URLs not listed here.\n"
+                + "\n".join(sources))
+    if errors:
+        out += f"\n\n[web search errors this query: {', '.join(sorted(set(errors)))}]"
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +262,20 @@ Each new_deadline should match this format:
 
 needs_human_review items may also carry "urgent": true under the same criteria \
 (e.g. an unverified report of an imminent mass revocation still deserves the flag).
+
+PROVENANCE (required on every needs_human_review item):
+Each needs_human_review item MUST carry "provenance_urls": a list of 1-3 URLs you \
+actually read for that item, most useful first, copied verbatim from the \
+"=== SOURCES CONSULTED ===" appendix of the research findings.
+- Include the URL even when it is NOT a primary or authoritative source. A trade-press \
+article, a mailing-list post, or a national agency's news page is exactly what makes \
+the follow-up a click instead of a fresh search. "Not primary" is a reason to flag the \
+item for review, never a reason to omit the URL.
+- If the findings genuinely contain no URL for an item, use an empty list []. NEVER \
+invent, guess, or reconstruct a URL that does not appear in the appendix.
+- This is separate from "source_url" on new_deadlines, which must stay the primary \
+authoritative source. new_deadlines may also carry "provenance_urls" when the primary \
+source was reached via some other page.
 
 Each document_version_update:
 {
@@ -630,6 +688,33 @@ def load_prior_review_sigs(days: int = 14, exclude_date: str | None = None) -> d
     return sigs
 
 
+def _normalize_provenance(item: dict) -> dict:
+    """Coerce provenance_urls to a list of http(s) URLs, capped at 3.
+
+    The model sometimes emits a bare string instead of a list. Non-URL strings
+    are dropped rather than kept — a hallucinated citation is worse than none,
+    since the whole point is that the operator can click it and land on source.
+    Deliberately does NOT touch any field _review_sig() hashes (id/title/topic/
+    description/reason), so adding provenance cannot re-flag held items.
+    """
+    raw = item.get("provenance_urls")
+    if raw is None:
+        return item
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        item["provenance_urls"] = []
+        return item
+    seen, urls = set(), []
+    for u in raw:
+        u = str(u or "").strip()
+        if u.startswith(("http://", "https://")) and u not in seen:
+            seen.add(u)
+            urls.append(u)
+    item["provenance_urls"] = urls[:3]
+    return item
+
+
 def sanitize_changes(changes: dict) -> tuple[dict, list]:
     """Drop malformed proposals the diff model sometimes emits (empty dicts,
     items missing id or any human-readable text) before dedup/render."""
@@ -668,7 +753,7 @@ def sanitize_changes(changes: dict) -> tuple[dict, list]:
             if isinstance(it, str) and it.strip():
                 kept.append({"id": None, "description": it.strip()})
             elif isinstance(it, dict) and (it.get("description") or it.get("reason") or it.get("item")):
-                kept.append(it)
+                kept.append(_normalize_provenance(it))
             else:
                 dropped.append(("needs_human_review", _label(it), "malformed (empty)"))
         changes["needs_human_review"] = kept
