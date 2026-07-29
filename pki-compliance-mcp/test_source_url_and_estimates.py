@@ -125,7 +125,7 @@ ONGOING_IDS = {
     "microsoft-secure-boot-expiry", "chrome-digicert-legacy-roots-distrust",
     "microsoft-trp-single-purpose-roots", "chrome-clientauth-ica",
     "chrome-dedicated-tls-enforcement", "luxembourg-nis2-in-force",
-    "dora-effective", "nis2-germany-bsi",
+    "dora-effective", "nis2-germany-bsi", "nis2-italy-audit",
 }
 unified = pki.get_all_deadlines_unified()
 by_id = {d["id"]: d for d in unified}

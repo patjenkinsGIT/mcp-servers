@@ -46,7 +46,7 @@ renders anywhere in the DOM (checked 2026-07-21: zero instances). Whoever
 wires this up should reuse/rename that legend slot to **"In force"** with the
 amber swatch, rather than leaving a dead legend entry and adding a new one.
 
-## Entries currently carrying `status: "ongoing"` (14, as of 2.4.9)
+## Entries currently carrying `status: "ongoing"` (15, as of 2.4.10)
 
 chrome-entrust-distrust (2024-11-11), apple-entrust-distrust (2024-11-15),
 mozilla-entrust-distrust (2024-11-30), microsoft-entrust-distrust (2025-04-16),
@@ -54,11 +54,11 @@ chrome-clientauth-ica (2025-06-15), dora-effective (2025-01-17),
 nis2-germany-bsi (2025-12-06), digicert-g1-root-distrust (2026-04-15),
 luxembourg-nis2-in-force (2026-05-10), microsoft-april-2026-ctl-notbefore
 (2026-05-19), microsoft-secure-boot-expiry (2026-06-01),
-chrome-dedicated-tls-enforcement (2026-06-15),
+chrome-dedicated-tls-enforcement (2026-06-15), nis2-italy-audit (2026-06-30),
 chrome-digicert-legacy-roots-distrust (2026-07-01),
 microsoft-trp-single-purpose-roots (2026-07-01).
 
-Two of these (`dora-effective`, `nis2-germany-bsi`) come from framework
+Three of these (`dora-effective`, `nis2-germany-bsi`, `nis2-italy-audit`) come from framework
 sub-lists — the unified API flattens them identically, but if any framework
 detail view renders its own status badges, apply the same mapping there.
 

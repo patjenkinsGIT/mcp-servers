@@ -1437,13 +1437,14 @@ REGULATORY_FRAMEWORKS = [
             },
             {
                 "id": "nis2-italy-audit",
-                "title": "Italy First Compliance Audit",
+                "title": "Italy Annual Categorization Deadline",
                 "date": "2026-06-30",
+                "status": "ongoing",
                 "source_url": "https://www.acn.gov.it/portale/nis/categorizzazione",
-                "category": "audit",
-                "impact": "Italian in-scope entities must be able to demonstrate NIS2 compliance in the first audit cycle.",
+                "category": "reporting",
+                "impact": "Italian in-scope entities must file and keep current their categorized list of activities and services on the ACN platform before the window closes each year; ACN may challenge the categories afterwards.",
                 "isMajor": True,
-                "description": "Deadline for first audit verifying NIS2 compliance (moved from Dec 31, 2025).",
+                "description": "Close of the annual window (1 May - 30 June) in which essential and important entities must communicate and update, via the ACN digital platform, the list of their activities and services with the relevant impact categories (Article 30(1), D.Lgs. 138/2024). The obligation was introduced by ACN Determination 155238 of 20 April 2026.",
                 "jurisdiction_detail": "Italy",
                 "consequences": {
                     "enforcement": "Article 30(1) of the Italian NIS decree requires essential and important entities to communicate and update their list of activities and services, with relevance categories, on the ACN platform between 1 May and 30 June each year. ACN may then verify submissions on a sample basis, including by comparison against similar entities.",
