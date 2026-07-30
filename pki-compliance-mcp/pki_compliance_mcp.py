@@ -125,6 +125,19 @@ DOCUMENTS = {
         "check_url": "https://raw.githubusercontent.com/TrustedRootProgram/Program-Requirements/main/Requirements.md",
         "priority": "medium",
     },
+    "microsoft_root_announcements": {
+        # Added 2026-07-30. Microsoft created Announcements.md on 2026-07-29 as
+        # the official channel for Trusted Root Program announcements; we only
+        # hashed Requirements.md, so program announcements were invisible to the
+        # doc check. Separate doc_id (not a second URL on microsoft_root_program)
+        # because document_hashes is keyed by doc_id — one hash per file, so an
+        # announcement is distinguishable from a requirements change.
+        # NOTE: the file lives at the repo ROOT, not under trusted-root/.
+        "name": "Microsoft Trusted Root Program Announcements",
+        "url": "https://github.com/TrustedRootProgram/Program-Requirements/blob/main/Announcements.md",
+        "check_url": "https://raw.githubusercontent.com/TrustedRootProgram/Program-Requirements/main/Announcements.md",
+        "priority": "high",
+    },
     "nist_800_131a": {
         "name": "NIST SP 800-131A (Algorithm Transitions)",
         "url": "https://csrc.nist.gov/publications/detail/sp/800-131a/rev-2/final",
@@ -1394,6 +1407,22 @@ REGULATORY_FRAMEWORKS = [
                 },
             },
             {
+                "id": "nis2-czechia-effective",
+                "title": "Czechia Cybersecurity Act Effective",
+                "date": "2025-11-01",
+                "status": "ongoing",
+                "source_url": "https://portal.nukib.gov.cz/informacni-servis/aktualne/6904ea6c0fc0983fc00a08e2",
+                "category": "national",
+                "impact": "Czech in-scope entities must notify their regulated service to NÚKIB through the NÚKIB Portal within 60 days of meeting the conditions, then meet the duties of whichever obligation regime they land in.",
+                "isMajor": True,
+                "description": "Act No. 264/2025 Sb. on cybersecurity entered into force on 1 November 2025 — a full recodification transposing NIS2 and replacing Act No. 181/2014 Sb. Providers are split into a higher-obligations and a lower-obligations regime (§ 8), covering an estimated 6,000+ regulated organizations. NÚKIB is the supervisory authority and its Portal is the mandatory channel between regulated entities and the authority.",
+                "jurisdiction_detail": "Czechia",
+                "consequences": {
+                    "enforcement": "Section 6(1) of Act No. 264/2025 Sb. requires a provider meeting the registration conditions to notify its regulated service to NÚKIB within 60 days of the day those conditions were met — the clock runs per entity from the date it comes into scope, not once from the Act's commencement. Notification goes through the NÚKIB Portal, and changes that could move a provider between obligation regimes must likewise be reported within 60 days (§ 9).",
+                    "scenario": "The 60-day clock is what catches people, because it is not a date anyone has in a calendar — it starts when the organization crosses into scope, which can happen through headcount growth, an acquisition or a new service line. A Czech subsidiary comfortably outside Act 181/2014 can become a regulated provider under the new Act without anything changing in its network. For a certificate team the real work starts after registration: the regime you land in decides how much of your cryptography, renewal and incident-reporting practice has to be documented rather than merely working.",
+                },
+            },
+            {
                 "id": "nis2-germany-bsi",
                 "title": "Germany BSI Act Effective",
                 "date": "2025-12-06",
@@ -1407,6 +1436,22 @@ REGULATORY_FRAMEWORKS = [
                 "consequences": {
                     "enforcement": "Germany's NIS2 implementation act (BGBl. I 2025 Nr. 301, promulgated 2025-12-05) brings the amended BSI Act into force, making registration, risk-management and incident-reporting duties applicable to in-scope German entities under BSI supervision.",
                     "scenario": "Scope is self-assessed, which is where German entities get caught: nobody writes to tell you that you are in scope. A mid-sized manufacturer or logistics operator that clears the size and sector thresholds is subject to the duties whether or not it has worked that out, and the three-month registration clock runs from the date it became in scope — not from the date someone noticed.",
+                },
+            },
+            {
+                "id": "nis2-sweden-effective",
+                "title": "Sweden Cybersecurity Act Effective",
+                "date": "2026-01-15",
+                "status": "ongoing",
+                "source_url": "https://svenskforfattningssamling.se/doc/20251506.html",
+                "category": "national",
+                "impact": "Swedish in-scope entities are bound by the Cybersecurity Act's risk-management and incident-reporting duties from 15 January 2026, whether or not their registration is complete.",
+                "isMajor": True,
+                "description": "Cybersäkerhetslagen (SFS 2025:1506), Sweden's NIS2 transposition — adopted by the Riksdag 10 December 2025, issued 11 December 2025, in force 15 January 2026. It repeals lagen (2018:1174) om informationssäkerhet för samhällsviktiga och digitala tjänster, which continues to govern breaches committed before commencement. The companion cybersäkerhetsförordningen (2025:1507) designates the authorities: supervision is sectoral (Finansinspektionen for banking and financial market infrastructure, Statens energimyndighet for energy, Transportstyrelsen for transport, and others under § 7), while Försvarets radioanstalt is the single point of contact (§ 23), the CSIRT unit (§ 31) and the cyber crisis management authority (§ 35).",
+                "jurisdiction_detail": "Sweden",
+                "consequences": {
+                    "enforcement": "The transitional provisions to SFS 2025:1506 bring the Act into force on 15 January 2026 and repeal lagen (2018:1174), with the repealed law still applying to breaches committed before that date. The Chapter 2 duties on operators — risk management, notification and incident reporting — therefore bind in-scope entities from 15 January 2026; incident reports go to the CSIRT unit and notifications to the single point of contact under the companion ordinance. Registration is not a precondition for the duties, so being unregistered is not a defence.",
+                    "scenario": "The old Swedish law covered a much narrower population, so the trap is an entity that sat outside lagen (2018:1174) assuming continuity. The obligations do not wait for anyone's registration to be processed: from 15 January 2026 an incident that degrades a service — including an expired certificate taking a public-facing system offline — is reportable on the NIS2 timescale, and \"our registration was still in progress\" changes nothing. Treat the in-force date, not your registration date, as the point where evidence starts to matter. Sweden's split supervision adds a second problem: a group spanning banking and energy answers to different supervisory authorities for different entities.",
                 },
             },
             {
@@ -2464,8 +2509,8 @@ RELATED_RFCS = [
 
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
-    "lastUpdated": "2026-07-29",
-    "dataVersion": "2.4.10",
+    "lastUpdated": "2026-07-30",
+    "dataVersion": "2.4.11",
     "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program Requirements v1.2, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
@@ -2484,7 +2529,7 @@ COMPLIANCE_METADATA = {
 }
 
 DATA_FRESHNESS = {
-    "lastFullReview": "2026-07-29",
+    "lastFullReview": "2026-07-30",
     "nextReviewDue": "2026-08-28",
     "reviewIntervalDays": 30,
     "fieldVerifications": {
