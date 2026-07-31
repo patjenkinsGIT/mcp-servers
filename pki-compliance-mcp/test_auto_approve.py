@@ -117,6 +117,54 @@ check("rejected flag no longer holds the topic", [x["id"] for x in a] == ["sc010
 car.REJECTED_FILE.write_text(json.dumps({"ids": ["rejected-1"], "signatures": []}))
 (d / f"pending_updates_{TODAY}.json").unlink()
 
+print("== classify: doc bump held by a prose-named flag (2026-07-29/07-31 regression) ==")
+# The flag names the document in prose and carries no ballot code at all, so
+# its signature is a "text:" one — ballot anchors alone never connected it to
+# the "[doc bump] ev-guidelines" proposal and the bump shipped under the hold.
+(d / f"pending_updates_{TODAY}.json").write_text(json.dumps({
+    "needs_human_review": [
+        {"id": "cabf-ev-guidelines-version-discrepancy",
+         "title": "EV Guidelines Version Discrepancy (v2.0.3 vs v2.0.2)",
+         "description": "Sources disagree on the current EV Guidelines version."},
+    ],
+}))
+EV_BUMP = {"id": "ev-guidelines", "new_version": "2.0.3"}
+a, dv, r, s = aa.classify({"document_version_updates": [EV_BUMP]}, CURRENT, 5)
+check("doc bump queues under a prose-named review hold",
+      not dv and len(r) == 1 and "review hold" in r[0][2])
+check("hold reason names the document token", "evguidelines" in r[0][2])
+# An unrelated document is untouched by the EV hold.
+a, dv, r, s = aa.classify(
+    {"document_version_updates": [{"id": "smime-br", "new_version": "1.0.9"}]}, CURRENT, 5)
+check("unrelated doc bump still auto-approves under an EV hold",
+      [x["id"] for x in dv] == ["smime-br"] and not r)
+# Rejecting the flag (verdict given) lifts the hold; the bump then applies.
+car.REJECTED_FILE.write_text(json.dumps(
+    {"ids": ["rejected-1", "cabf-ev-guidelines-version-discrepancy"], "signatures": []}))
+a, dv, r, s = aa.classify({"document_version_updates": [EV_BUMP]}, CURRENT, 5)
+check("rejected flag no longer holds the doc bump", [x["id"] for x in dv] == ["ev-guidelines"])
+car.REJECTED_FILE.write_text(json.dumps({"ids": ["rejected-1"], "signatures": []}))
+
+# A ballot flag that names the document in passing holds it too.
+(d / f"pending_updates_{TODAY}.json").write_text(json.dumps({
+    "needs_human_review": [
+        {"id": "review-smc017v2-key-sizes",
+         "description": "Ballot SMC017v2 amends the S/MIME Baseline Requirements; IPR review open"},
+    ],
+}))
+a, dv, r, s = aa.classify(
+    {"document_version_updates": [{"id": "smime-br", "new_version": "1.0.9"}]}, CURRENT, 5)
+check("ballot flag naming S/MIME BR holds the smime-br bump",
+      not dv and len(r) == 1 and "smimebr" in r[0][2])
+# Deadlines keep the narrower ballot-anchor gate — a document token must not
+# queue every deadline that merely cites the document.
+a, dv, r, s = aa.classify({"new_deadlines": [entry(
+    id="smime-br-citing-deadline", title="New S/MIME BR Requirement",
+    description="Applies under the S/MIME Baseline Requirements.")]}, CURRENT, 5)
+check("deadline citing a held document is not held by the document token",
+      [x["id"] for x in a] == ["smime-br-citing-deadline"])
+(d / f"pending_updates_{TODAY}.json").unlink()
+
 print("== patch_source round-trip ==")
 mini = '''"""mini"""
 DEADLINES = [

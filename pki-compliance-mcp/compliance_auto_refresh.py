@@ -589,19 +589,78 @@ def _canon_anchor(a: str) -> str:
     return a
 
 
+# Tracked CA/B Forum documents, matched by BOTH the id a proposal uses and the
+# prose name a human-review flag uses. A "[doc bump] ev-guidelines" proposal and
+# a flag titled "EV Guidelines Version Discrepancy (v2.0.3 vs v2.0.2)" are the
+# same topic, but share no ballot code, so ballot anchors alone never connect
+# them. (2026-07-29 and again 07-31: the ev-guidelines 2.0.2 -> 2.0.3 bump
+# auto-applied with exactly that flag open — the same failure class as the
+# 2026-07-12 SC0101v2 incident, benign only because the data happened to be
+# right.) Tokens are the canonicalized doc ids, so a manual hold written as the
+# doc id ("ev-guidelines") lands on the same token.
+_DOC_ANCHOR_RES = [
+    ("evguidelines", re.compile(
+        r"\bev[\s-]?guidelines\b"
+        r"|\bextended[\s-]validation(?:[\s-](?:ssl|tls|certificate))*[\s-]guidelines\b",
+        re.IGNORECASE)),
+    ("smimebr", re.compile(
+        r"\bs[\s/]?mime[\s-]?(?:brs?|baseline[\s-]requirements)\b", re.IGNORECASE)),
+    ("tlsbr", re.compile(
+        r"\btls[\s-]?(?:brs?|baseline[\s-]requirements)\b"
+        r"|\bserver[\s-]certificate[\s-]baseline[\s-]requirements\b", re.IGNORECASE)),
+    ("codesigningbr", re.compile(
+        r"\bcode[\s-]?signing[\s-]?(?:brs?|baseline[\s-]requirements)\b", re.IGNORECASE)),
+    ("netsec", re.compile(
+        r"\bnetsec\b|\bnetwork[\s-]security[\s-]requirements\b", re.IGNORECASE)),
+]
+
+# Anchors that identify a topic on their own. A CJEU referral is one story
+# however many regulations the model names alongside it; letting those co-occur
+# in the signature split it into a new bucket every rewording (2026-07-13,
+# 07-21, 07-29, 07-31: four ids for one flag, alternating between
+# cjeu+nis2+transposition and cjeu+dora+nis2+transposition). Collapsing to the
+# dominant token affects the dedup signature ONLY — hold matching still uses the
+# full anchor set, so nothing that was held stops being held.
+_DOMINANT_ANCHORS = {"cjeu"}
+
+
+def _anchor_text(item) -> str:
+    """The item text anchors are read from (id + human-written prose fields)."""
+    if isinstance(item, dict):
+        return " ".join(str(item.get(k) or "")
+                        for k in ("id", "title", "topic", "description", "reason"))
+    return str(item)
+
+
+def _review_anchors(item) -> set:
+    """Every ballot/regulation anchor token in an item's text, uncollapsed."""
+    return {_canon_anchor(m.group(1))
+            for m in _REVIEW_ANCHOR_RE.finditer(_anchor_text(item))}
+
+
+def document_anchors(item) -> set:
+    """Tracked-document tokens for an item, matched by doc id OR prose name."""
+    text = _anchor_text(item)
+    return {tok for tok, pat in _DOC_ANCHOR_RES if pat.search(text)}
+
+
+def hold_anchors_for(item) -> set:
+    """Every hold token an item can match: anchors + tracked-document names.
+
+    Wider than the dedup signature on purpose — an unmatched hold ships an
+    unreviewed change, an over-matched one only queues something for a human."""
+    return _review_anchors(item) | document_anchors(item)
+
+
 def _review_sig(item) -> str:
     """Signature for a needs_human_review flag, stable across model runs."""
-    if isinstance(item, dict):
-        text = " ".join(str(item.get(k) or "")
-                        for k in ("id", "title", "topic", "description", "reason"))
-    else:
-        text = str(item)
-    anchors = set()
-    for m in _REVIEW_ANCHOR_RE.finditer(text):
-        anchors.add(_canon_anchor(m.group(1)))
+    anchors = _review_anchors(item)
+    dominant = anchors & _DOMINANT_ANCHORS
+    if dominant:
+        anchors = dominant
     if anchors:
         return "anchors:" + "+".join(sorted(anchors))
-    return "text:" + " ".join(_norm(text).split()[:12])
+    return "text:" + " ".join(_norm(_anchor_text(item)).split()[:12])
 
 
 def load_manual_holds() -> set:
@@ -632,8 +691,10 @@ def load_manual_holds() -> set:
 
 
 def held_review_anchors(days: int = 14) -> set:
-    """Anchor tokens from non-rejected review flags in recent pending files,
-    plus unexpired manual holds from HOLDS_FILE.
+    """Hold tokens from non-rejected review flags in recent pending files,
+    plus unexpired manual holds from HOLDS_FILE. Tokens are ballot/regulation
+    anchors plus the tracked CA/B Forum documents a flag names (see
+    hold_anchors_for()).
 
     A topic a human is still deciding on (e.g. a ballot held for IPR review)
     must not be auto-applied even if a later research run re-proposes it as a
@@ -657,11 +718,12 @@ def held_review_anchors(days: int = 14) -> set:
         for it in data.get("needs_human_review", []):
             if not isinstance(it, dict):
                 it = {"description": str(it)}
-            sig = _review_sig(it)
-            if it.get("id") in rejected["ids"] or sig in rejected["signatures"]:
+            if it.get("id") in rejected["ids"] or _review_sig(it) in rejected["signatures"]:
                 continue
-            if sig.startswith("anchors:"):
-                anchors.update(sig[len("anchors:"):].split("+"))
+            # hold_anchors_for(), not the signature: a flag can name a tracked
+            # document in prose and carry no ballot code at all, in which case
+            # its signature is a "text:" one and would contribute no hold.
+            anchors.update(hold_anchors_for(it))
     return anchors
 
 
@@ -761,10 +823,26 @@ def sanitize_changes(changes: dict) -> tuple[dict, list]:
     return changes, dropped
 
 
+def _migrate_sig(sig: str) -> str:
+    """Re-collapse a stored anchor signature under today's dominant-anchor rule.
+
+    Rejections are permanent, so a signature written before a rule change must
+    keep matching — otherwise the rule change silently un-rejects a topic and it
+    resurfaces once. (2026-07-31: making `cjeu` dominant would have stranded the
+    stored anchors:cjeu+nis2+transposition and anchors:cjeu+dora+nis2+
+    transposition rejections, letting the CJEU flag come back a fifth time.)"""
+    if not sig.startswith("anchors:"):
+        return sig
+    anchors = set(sig[len("anchors:"):].split("+"))
+    dominant = anchors & _DOMINANT_ANCHORS
+    return "anchors:" + "+".join(sorted(dominant or anchors))
+
+
 def load_rejected() -> dict:
     try:
         data = json.loads(REJECTED_FILE.read_text())
-        return {"ids": set(data.get("ids", [])), "signatures": set(data.get("signatures", []))}
+        return {"ids": set(data.get("ids", [])),
+                "signatures": {_migrate_sig(s) for s in data.get("signatures", [])}}
     except Exception:
         return {"ids": set(), "signatures": set()}
 

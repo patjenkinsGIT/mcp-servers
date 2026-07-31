@@ -269,5 +269,80 @@ check("hold-until is inclusive: expires end of that day",
 with_tmp()
 check("no holds file -> no manual holds", car.load_manual_holds() == set())
 
+print("== tracked-document anchors (2026-07-29/07-31 regression) ==")
+# A doc-bump proposal names the document by id; a flag names it in prose. Both
+# must resolve to the same hold token, or the bump slips past an open flag.
+check("doc id and prose name agree (ev-guidelines)",
+      car.document_anchors({"id": "ev-guidelines", "new_version": "2.0.3"})
+      == car.document_anchors({"id": "cabf-ev-guidelines-version-discrepancy",
+                               "title": "EV Guidelines Version Discrepancy (v2.0.3 vs v2.0.2)"})
+      == {"evguidelines"})
+check("spelled-out EV name anchors",
+      car.document_anchors({"description": "Extended Validation SSL Certificate Guidelines v2.0.3"})
+      == {"evguidelines"})
+DOC_CASES = [
+    ("smimebr", "smime-br", ["S/MIME BR", "S/MIME Baseline Requirements", "SMIME BRs"]),
+    ("tlsbr", "tls-br", ["TLS BR", "TLS Baseline Requirements",
+                         "Server Certificate Baseline Requirements"]),
+    ("codesigningbr", "code-signing-br", ["Code Signing BRs",
+                                          "Code Signing Baseline Requirements"]),
+    ("netsec", "netsec", ["Network Security Requirements", "NetSec"]),
+]
+for token, doc_id, prose in DOC_CASES:
+    check(f"{doc_id} id anchors to {token}",
+          car.document_anchors({"id": doc_id}) == {token})
+    for name in prose:
+        check(f"{doc_id} prose name {name!r} anchors",
+              token in car.document_anchors({"description": f"the {name} were updated"}))
+check("unrelated text yields no document anchor",
+      car.document_anchors({"description": "Chrome Root Program policy update"}) == set())
+check("document anchors stay out of the dedup signature",
+      car._review_sig({"id": "review-sc087v2-ev-guidelines-serialnumber",
+                       "description": "Ballot SC087v2 passed, in IPR review"})
+      == car._review_sig({"id": "sc087v2-ev-registration-number-ipr-pending",
+                          "description": "SC087v2 remains in IPR Review Period"}))
+
+d = with_tmp()
+(d / f"pending_updates_{RECENT}.json").write_text(json.dumps({"needs_human_review": [
+    {"id": "cabf-ev-guidelines-version-discrepancy",
+     "title": "EV Guidelines Version Discrepancy (v2.0.3 vs v2.0.2)",
+     "description": "Sources disagree on the current EV Guidelines version."}]}))
+held = car.held_review_anchors()
+check("a prose-only flag with no ballot code still contributes a hold",
+      "evguidelines" in held)
+check("that flag holds only its own document", "tlsbr" not in held)
+d = with_tmp()
+car.HOLDS_FILE.write_text(json.dumps({"ev-guidelines": FUTURE}))
+check("manual hold written as the doc id lands on the doc token",
+      "evguidelines" in car.load_manual_holds())
+
+print("== cjeu is a dominant anchor (recurred under 4 ids: 07-13/21/29/31) ==")
+CJEU_A = car._review_sig({"id": "nis2-cjeu-referral-laggard-states",
+                          "description": "Commission referral to the CJEU over NIS2 "
+                                         "transposition failures"})
+CJEU_B = car._review_sig({"id": "nis2-cjeu-daily-fines",
+                          "description": "CJEU referral over NIS2 and DORA transposition, "
+                                         "seeking daily fines"})
+check("cjeu collapses to a single durable bucket", CJEU_A == "anchors:cjeu")
+check("co-occurring dora no longer splits the bucket", CJEU_A == CJEU_B)
+check("a non-CJEU NIS2 flag keeps its own bucket",
+      car._review_sig({"id": "x", "description": "Sweden transposed NIS2"}) != CJEU_A)
+d = with_tmp()
+car.REJECTED_FILE.write_text(json.dumps({"ids": [], "signatures": [
+    "anchors:cjeu+nis2+transposition",              # written before cjeu was dominant
+    "anchors:cjeu+dora+nis2+transposition",
+    "anchors:csc32",                                # untouched by the rule
+    "some plain text sig|2026-07-01",
+]}))
+rej = car.load_rejected()
+check("pre-existing cjeu rejections still match after the rule change",
+      CJEU_A in rej["signatures"] and CJEU_B in rej["signatures"])
+check("non-dominant stored signatures are untouched",
+      {"anchors:csc32", "some plain text sig|2026-07-01"} <= rej["signatures"])
+check("collapsing the signature does not narrow the hold set",
+      {"cjeu", "nis2", "transposition"} <= car.hold_anchors_for(
+          {"id": "nis2-cjeu-referral-laggard-states",
+           "description": "CJEU referral over NIS2 transposition failures"}))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 raise SystemExit(1 if FAIL else 0)

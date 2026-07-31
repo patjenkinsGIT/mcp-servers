@@ -27,8 +27,10 @@ Auto-apply criteria (new deadlines — ALL must pass):
   - not already in live data (id or title+date signature), not previously
     rejected (--reject list)
   - no two auto candidates touch the same id (conflict guard: both queue)
-Document version updates auto-apply when the doc id is known and a version is
-given. updated_deadlines / regulatory_updates ALWAYS queue for review in v1 —
+Document version updates auto-apply when the doc id is known, a version is
+given, and no open review flag names that document (by id or by prose name —
+"EV Guidelines Version Discrepancy" holds an `ev-guidelines` bump).
+updated_deadlines / regulatory_updates ALWAYS queue for review in v1 —
 freeform edits to existing entries never ship unreviewed (this also covers the
 estimated-date discipline: date changes require a human eye). Deletes are not
 part of the schema; nothing is ever removed automatically.
@@ -140,13 +142,16 @@ def classify(changes: dict, current_data: dict | None, max_auto: int):
             continue
         # A topic with an open human-review hold (e.g. ballot in IPR review)
         # never auto-applies, however confident today's research is.
-        item_sig = car._review_sig(item)
-        if item_sig.startswith("anchors:"):
-            overlap = set(item_sig[len("anchors:"):].split("+")) & held_anchors
-            if overlap:
-                review.append(("deadline", item,
-                               f"topic has an open review hold ({'+'.join(sorted(overlap))})"))
-                continue
+        # Ballot/regulation anchors only here, not the wider hold_anchors_for()
+        # set: a deadline merely citing a document ("...under the TLS BRs") is
+        # not the same claim as that document's version state, so document
+        # tokens would queue most deadlines for nothing. They gate doc bumps,
+        # where the document IS the claim.
+        overlap = car._review_anchors(item) & held_anchors
+        if overlap:
+            review.append(("deadline", item,
+                           f"topic has an open review hold ({'+'.join(sorted(overlap))})"))
+            continue
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", item.get("date", "")):
             review.append(("deadline", item, f"bad date format: {item.get('date')}"))
             continue
@@ -162,13 +167,23 @@ def classify(changes: dict, current_data: dict | None, max_auto: int):
         auto_new = [i for i in auto_new if i["id"] not in dupes]
 
     for upd in changes.get("document_version_updates", []):
-        if upd.get("id") in KNOWN_DOC_IDS and upd.get("new_version"):
-            if cur_docs.get(upd["id"]) == upd["new_version"]:
-                skipped.append(("doc", upd, "version already current"))
-            else:
-                auto_docs.append(upd)
-        else:
+        if upd.get("id") not in KNOWN_DOC_IDS or not upd.get("new_version"):
             review.append(("doc", upd, "unknown document id or missing version"))
+            continue
+        if cur_docs.get(upd["id"]) == upd["new_version"]:
+            skipped.append(("doc", upd, "version already current"))
+            continue
+        # A doc bump names its document by id ("ev-guidelines"); a flag on the
+        # same document names it in prose ("EV Guidelines Version Discrepancy
+        # (v2.0.3 vs v2.0.2)") and carries no ballot code. hold_anchors_for()
+        # resolves both to the same token so the open flag holds the bump.
+        # (2026-07-29/07-31: this bump shipped under exactly that flag.)
+        overlap = car.hold_anchors_for(upd) & held_anchors
+        if overlap:
+            review.append(("doc", upd,
+                           f"topic has an open review hold ({'+'.join(sorted(overlap))})"))
+            continue
+        auto_docs.append(upd)
 
     # Freeform edits never ship unreviewed (covers estimated-date discipline).
     for upd in changes.get("updated_deadlines", []):

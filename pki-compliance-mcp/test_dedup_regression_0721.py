@@ -65,8 +65,15 @@ check("DORA CTPP list gets a ctpp qualifier",
       SIG["dora-ctpp-list-published"] == "anchors:ctpp+dora")
 check("Czechia/Sweden transposition gets a transposition qualifier",
       SIG["nis2-czechia-sweden-transposition"] == "anchors:nis2+transposition")
-check("CJEU referral gets a cjeu qualifier",
-      SIG["nis2-cjeu-referral-laggard-states"] == "anchors:cjeu+nis2+transposition")
+# cjeu is a dominant anchor as of 2026-07-31: the co-occurring regulation
+# anchors used to ride along in the signature (cjeu+nis2+transposition vs
+# cjeu+dora+nis2+transposition), which split one story across four ids.
+check("CJEU referral collapses to the durable cjeu bucket",
+      SIG["nis2-cjeu-referral-laggard-states"] == "anchors:cjeu")
+check("CJEU hold tokens still carry the co-occurring regulations",
+      {"cjeu", "nis2", "transposition"}
+      <= car.hold_anchors_for(
+          [it for it in SIX if it["id"] == "nis2-cjeu-referral-laggard-states"][0]))
 check("Commission simplification stays in its dora+nis2 bucket",
       SIG["nis2-commission-simplification-amendments"] == "anchors:dora+nis2")
 check("UK ransomware bill anchors instead of falling back to text:",
@@ -147,7 +154,7 @@ car.reject_ids([
 ])
 saved = json.loads(car.REJECTED_FILE.read_text())
 check("all four hard rejects persisted with topic signatures",
-      {"anchors:csc32", "anchors:ctpp+dora", "anchors:cjeu+nis2+transposition",
+      {"anchors:csc32", "anchors:ctpp+dora", "anchors:cjeu",
        "anchors:ransomware"} <= set(saved["signatures"]))
 
 # Next safety-net run re-proposes all six topics, re-worded, under fresh ids.
