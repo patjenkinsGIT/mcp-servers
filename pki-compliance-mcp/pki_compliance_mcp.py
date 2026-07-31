@@ -1152,6 +1152,44 @@ DEADLINES = [
         "jurisdiction": "global",
     },
     {
+        "id": "smc017-smime-ca-rsa-4096",
+        "date": "2026-09-15",
+        "title": "S/MIME Root and Subordinate CA RSA keys must be 4096-bit",
+        "description": "S/MIME BRs v1.0.15 (ballot SMC017v2, passed 2026-06-16; IPR Review Period 2026-06-30 20:00 UTC to 2026-07-30 20:00 UTC closed with no Exclusion Notice, v1.0.15 published 2026-07-30): the minimum RSA key size for Root and Subordinate CA certificates rises from 2048 to 4096 bits for keys CREATED after September 15, 2026. The trigger is the key creation date, not the certificate issuance date — key material generated on or before that date remains usable under the 2048-bit minimum. Subscriber certificates are unaffected and retain the 2048-bit minimum.",
+        "source": "cab-forum",
+        "source_url": "https://cabforum.org/2026/06/16/ballot-smc-017v2/",
+        "category": "algorithm-deprecation",
+        "isMajor": True,
+        "impact": "S/MIME CAs must generate Root and Subordinate CA keys at RSA-4096 or stronger after 2026-09-15; key ceremonies, HSM capacity and hierarchy planning need to account for the larger keys.",
+        "is_estimated": False,
+        "framework_id": "cabforum",
+        "framework_name": "CA/Browser Forum",
+        "jurisdiction": "global",
+        "consequences": {
+            "enforcement": "From 2026-09-15 the S/MIME BRs require Root and Subordinate CA certificates to use RSA keys of at least 4096 bits where the key was created after that date. Because the requirement keys off key creation, a CA that pre-generated 2048-bit CA key material before the date is not retroactively non-compliant, but any key generated afterwards must meet the new floor. Subscriber certificate keys keep the 2048-bit minimum.",
+            "scenario": "No action unless you operate an S/MIME CA — but the key-creation trigger is worth reading carefully if you do, because it cuts both ways. A CA that ran a key ceremony in August 2026 and holds the keys in reserve can still issue from them; a CA that assumed the rule tracked issuance date and scheduled its ceremony for October at 2048 bits has a problem it will not see until an audit. For enterprises the practical effect arrives second-hand: S/MIME hierarchies get rebuilt on larger keys, so expect new intermediates and chain updates in mail clients and gateways over the following year.",
+        },
+    },
+    {
+        "id": "smc017-smime-subca-3072-issuance-sunset",
+        "date": "2027-09-15",
+        "title": "No S/MIME Subscriber issuance from Sub-CAs with RSA modulus under 3072",
+        "description": "S/MIME BRs v1.0.15 (ballot SMC017v2): by September 15, 2027, CAs SHALL NOT issue Subscriber certificates from any Subordinate CA whose RSA key modulus is less than 3072 bits — sunsetting issuance from legacy 2048-bit Sub-CAs. This is a restriction on issuance from the Sub-CA, not on the Subscriber key size, and it is separate from the 2026-09-15 requirement that newly created Root/Sub-CA keys be 4096-bit.",
+        "source": "cab-forum",
+        "source_url": "https://cabforum.org/2026/06/16/ballot-smc-017v2/",
+        "category": "algorithm-deprecation",
+        "isMajor": True,
+        "impact": "S/MIME CAs still operating 2048-bit Subordinate CAs must stand up replacement Sub-CAs at 3072 bits or higher and migrate issuance before 2027-09-15.",
+        "is_estimated": False,
+        "framework_id": "cabforum",
+        "framework_name": "CA/Browser Forum",
+        "jurisdiction": "global",
+        "consequences": {
+            "enforcement": "From 2027-09-15 a CA may not issue S/MIME Subscriber certificates from a Subordinate CA whose RSA modulus is under 3072 bits. Existing certificates already issued from those Sub-CAs are not revoked by the rule, but the issuing path closes — continued issuance requires a Sub-CA meeting the new floor.",
+            "scenario": "The failure mode is a renewal that stops working rather than a certificate that breaks. An organization whose S/MIME certificates come from a long-lived 2048-bit intermediate finds that renewals after September 2027 arrive under a different intermediate, which matters wherever that chain was pinned or manually installed — mail gateways, signing appliances, archived trust bundles. Worth asking your S/MIME provider now which intermediate you are issuing from and what its replacement will be.",
+        },
+    },
+    {
         "id": "digicert-g1-root-distrust",
         "date": "2026-04-15",
         "status": "ongoing",
@@ -1404,6 +1442,21 @@ REGULATORY_FRAMEWORKS = [
                 "consequences": {
                     "enforcement": "Member states were required to transpose NIS2 into national law by 2024-10-17. Obligations bite through national law, and the directive sets maximum administrative fines of at least EUR 10 million or 2% of total worldwide annual turnover (whichever is higher) for essential entities, and at least EUR 7 million or 1.4% for important entities.",
                     "scenario": "Because 23 member states missed the deadline, the real problem is jurisdictional rather than technical. A group operating across the EU faces different in-force dates, different registration portals and different national deadlines for the same directive, so a single group-wide compliance date does not exist. Certificate-relevant duties — encryption, supply-chain security, incident notification when an expired certificate causes an outage — have to be tracked per country, per entity.",
+                },
+            },
+            {
+                "id": "nis2-netherlands-cbw",
+                "title": "Netherlands Cyberbeveiligingswet Effective",
+                "date": "2026-08-15",
+                "source_url": "https://zoek.officielebekendmakingen.nl/stb-2026-189.html",
+                "category": "national",
+                "impact": "Dutch entities in scope must register with the NCSC via mijn.ncsc.nl, meet the duty of care for network and information system security, and report significant incidents to their CSIRT within the statutory deadlines.",
+                "isMajor": True,
+                "description": "The Cyberbeveiligingswet (Cbw), the Dutch NIS2 transposition, enters into force on 15 August 2026 together with the Wet weerbaarheid kritieke entiteiten (CER transposition). Commencement is set by the Cyberbeveiligingsbesluit — Besluit van 8 juli 2026, Staatsblad 2026, 189, published 10 July 2026 — which also carries the implementing rules. Around 8,000 Dutch organizations come into scope, and roughly 500 are formally designated as critical entities under the Wwke.",
+                "jurisdiction_detail": "Netherlands",
+                "consequences": {
+                    "enforcement": "From 15 August 2026 in-scope entities must register with the NCSC through mijn.ncsc.nl, take measures to manage the risks to the security of their network and information systems (duty of care), and report significant incidents to their CSIRT within the statutory timeframes. Registration is mandatory as of that date.",
+                    "scenario": "The Netherlands lands late in the NIS2 wave, so the trap for a group already compliant elsewhere is assuming the Dutch entity inherits that work — it does not: registration is per-entity, through a Dutch portal, on a Dutch clock. Scope is self-assessed, so nobody writes to tell a mid-sized Dutch subsidiary it now has duties. For a certificate team the concrete item is the incident-reporting path: an expired certificate that takes a regulated service offline is a reportable significant incident, and the reporting deadline runs from detection, not from the post-mortem.",
                 },
             },
             {
@@ -1728,8 +1781,8 @@ CABF_DOCUMENTS = [
     {
         "id": "smime-br",
         "name": "S/MIME BRs",
-        "version": "1.0.14",
-        "date": "May 2026",
+        "version": "1.0.15",
+        "date": "Jul 2026",
         "url": "https://cabforum.org/working-groups/smime/documents/",
     },
     {
@@ -2510,8 +2563,8 @@ RELATED_RFCS = [
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
     "lastUpdated": "2026-07-31",
-    "dataVersion": "2.4.11",
-    "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.2, S/MIME BR 1.0.14, SC-080/081/085/090/091/092/097/098/099 Ballots, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program Requirements v1.2, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
+    "dataVersion": "2.4.12",
+    "basedOn": "CA/B Forum TLS BR 2.2.8, Code Signing BR 3.11, EV Guidelines 2.0.3, S/MIME BR 1.0.15, SC-080/081/085/090/091/092/097/098/099 Ballots, SMC017v2, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program Requirements v1.2, NIST SP 800-131A Rev 3, NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547, NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
         "https://cabforum.org",
@@ -2529,11 +2582,11 @@ COMPLIANCE_METADATA = {
 }
 
 DATA_FRESHNESS = {
-    "lastFullReview": "2026-07-30",
-    "nextReviewDue": "2026-08-28",
+    "lastFullReview": "2026-07-31",
+    "nextReviewDue": "2026-08-30",
     "reviewIntervalDays": 30,
     "fieldVerifications": {
-        "deadlines": {"verified": "2026-07-31", "source": "2026-07-29 review: uk-csr-lords-stage and uk-csr-royal-assent advanced from 'second reading scheduled' to 'completed 14 Jul 2026, now at Committee stage' (legislative stage only, no new date-certain; Royal Assent estimate unchanged at 2026-12-31). SMC017v2 REMAINS HELD - the ballot's own Review Notice gives the IPR period as 2026-06-30 20:00 UTC to 2026-07-30 20:00 UTC, i.e. the clock runs from the Review Notice, NOT from the 2026-06-16 vote; do not re-derive it as vote+30d. Both SMC017v2 deadlines (Root/Sub CA RSA 4096 from 2026-09-15; no Subscriber issuance from sub-3072-bit Sub-CAs from 2027-09-15) are drafted and blocked on that window closing; earliest safe add 2026-07-31. SC0101v2 (IPR ~Aug 6) also still held. Prior review 2026-07-21 (Microsoft TRP blind-window)"},
+        "deadlines": {"verified": "2026-07-31", "source": "2026-07-31 review: SMC017v2 HOLD RELEASED and applied. The IPR Review Period (2026-06-30 20:00 to 2026-07-30 20:00 UTC, per the ballot's own Review Notice) closed with no Exclusion Notice, confirmed by publication of S/MIME BR v1.0.15 on 2026-07-30 (cabforum/smime release tag Ballot_SMC017; the CABF S/MIME documents page lists v1.0.15 as adopted by SMC017v2). Added smc017-smime-ca-rsa-4096 (2026-09-15 - the trigger is key CREATION date, NOT certificate issuance date) and smc017-smime-subca-3072-issuance-sunset (2027-09-15); both upcoming, neither ongoing. smime-br doc bumped 1.0.14 -> 1.0.15. Netherlands NIS2 RESOLVED after three appearances: primary source is the Cyberbeveiligingsbesluit, Besluit van 8 juli 2026, Staatsblad 2026 nr. 189 (published 2026-07-10), which sets Cyberbeveiligingswet commencement at 2026-08-15; added nis2-netherlands-cbw at day precision, is_estimated false. It is an ONGOING_IDS candidate (type b, in-force regime) only AFTER 2026-08-15 - a future-dated ongoing entry breaks the date-consistency test. EV Guidelines discrepancy CLOSED: v2.0.3 dated 6 July 2026 adopted via SC087, so the auto-applied doc bump was correct; basedOn corrected (it still said 2.0.2). SC102 hold confirmed against its 2026-07-14 Review Notice (window 2026-07-14 08:00 to 2026-08-13 08:00 UTC), pin kept at 2026-08-15; SC0101v2 hold unchanged at 2026-08-08. 2026-09-15 now carries THREE obligations: SC-097 SHA-1 CA/CRL sunset, CSC-32 reserved policy OID, and the S/MIME CA RSA-4096 floor. Prior review 2026-07-29: uk-csr-lords-stage and uk-csr-royal-assent advanced from 'second reading scheduled' to 'completed 14 Jul 2026, now at Committee stage' (legislative stage only, no new date-certain; Royal Assent estimate unchanged at 2026-12-31); SMC017v2 held pending IPR close. STANDING RULE from that review, still true: a CA/B Forum ballot's IPR Review Period runs 30 days from the Review Notice, NOT from the vote-completion date - read the window off the ballot page, never re-derive it as vote+30d. Prior review 2026-07-21 (Microsoft TRP blind-window)"},
         "rootStores": {"verified": "2026-07-21", "source": "Individual root program policies. 2026-07-21: Microsoft source repointed to github.com/TrustedRootProgram/Program-Requirements (official since Oct 2025; superseded learn.microsoft.com page was monitored dead ~9 months) and converted from manual check to commits.atom feed. Blind-window review same day: Microsoft framework entry updated to Requirements v1.2 (single-purpose roots, 10-yr validity, incident reporting, CTLM) with April/June 2026 CTL actions."},
         "algorithmRequirements": {"verified": "2026-05-14", "source": "CA/B Forum TLS BR 2.2.6, NIST FIPS 203/204/205, NIST SP 800-131A Rev 3"},
         "caChains": {"verified": "2026-05-14", "source": "Official CA documentation"},
