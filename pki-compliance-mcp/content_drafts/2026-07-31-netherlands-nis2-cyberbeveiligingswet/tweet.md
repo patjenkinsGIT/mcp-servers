@@ -1,0 +1,1 @@
+Netherlands' NIS2 law (Cyberbeveiligingswet) enters into force Aug 15, 2026. Senate approved it July 7. In-scope Dutch entities: cert incidents (key compromise, mis-issuance, expiry outages) now belong in your reporting taxonomy. https://fixmycert.com/compliance #NIS2 #PKI

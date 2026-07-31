@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-07-31T10:28:28.878981+00:00",
+  "kind": "regulatory",
+  "signature": "netherlands nis2 transposition cyberbeveiligingswet enters into force|2026-08-15",
+  "source_item": {
+    "id": "nis2-netherlands-effective",
+    "date": "2026-08-15",
+    "title": "Netherlands NIS2 Transposition (Cyberbeveiligingswet) Enters Into Force",
+    "description": "The Dutch Senate approved the Cyberbeveiligingswet (transposing NIS2) and the Wet weerbaarheid kritieke entiteiten (transposing CER) on July 7, 2026. The Cyberbeveiligingswet enters into force on August 15, 2026, establishing a three-tier regulatory regime; formal notification of transposition to the European Commission had not yet been submitted as of the Senate vote.",
+    "source_url": "https://www.houthoff.com/insights/news/dutch-cybersecurity-act-enters-into-force-15-august/",
+    "category": "regulatory",
+    "isMajor": true,
+    "impact": "Dutch entities in scope of NIS2 must comply with new cybersecurity and incident-reporting obligations from August 15, 2026.",
+    "is_estimated": false,
+    "feed_confirmed": true,
+    "urgent": true
+  },
+  "status": "draft - not published"
+}
