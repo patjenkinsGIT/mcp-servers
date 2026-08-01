@@ -22,7 +22,16 @@ LOG=/var/log/pki-compliance-deploy.log
 
 cd "$APP_DIR"
 git pull origin main
-pip install -r requirements.txt --break-system-packages -q
+
+# No host-level pip install here, deliberately. requirements.txt is the
+# CONTAINER's dependency set and `docker compose build` installs it inside the
+# image. The systemd API runs --simple-http, which guards the MCP SDK import
+# behind try/except and never needs it; its own deps (httpx, feedparser,
+# pydantic, bs4) come from apt. Installing requirements.txt on the host pulled
+# mcp[cli] -> PyJWT>=2.13, which collides with apt's python3-jwt 2.7 (no pip
+# RECORD, so pip cannot uninstall it). Under `set -e` that aborted the deploy
+# before it restarted anything. If a host dep is ever genuinely missing, the
+# verify step below catches it — the probe imports the module.
 
 # 1. systemd API (:5000, fixmycert.com frontend) — picks up the file from disk
 sudo systemctl restart "$SERVICE"
