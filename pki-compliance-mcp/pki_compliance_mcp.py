@@ -4639,11 +4639,26 @@ async def get_status(params: GetStatusInput) -> str:
     """
     state = load_state()
 
+    # data_version identifies the CODE this process loaded, not the data dir.
+    # The Docker container bakes pki_compliance_mcp.py into its image while the
+    # systemd API reads it from disk, so the two can drift apart silently — as
+    # they did for two days from 2026-07-29. Exposing it here lets a caller with
+    # no shell on the droplet (Cowork) compare this against the live API's
+    # dataVersion and self-diagnose a stale container instead of guessing.
+    unified_total = len(get_all_deadlines_unified())
+
     result = {
         "last_check": state.get("last_check"),
+        "data_version": COMPLIANCE_METADATA.get("dataVersion"),
+        "data_last_updated": COMPLIANCE_METADATA.get("lastUpdated"),
         "tracked_feeds": len(FEEDS),
         "tracked_documents": len(DOCUMENTS),
+        # tracked_deadlines counts DEADLINES only. It EXCLUDES the
+        # REGULATORY_FRAMEWORKS entries, so it will never equal the API's
+        # unified total — comparing the two is not a drift signal. Compare
+        # total_deadlines_unified instead; that is the like-for-like number.
         "tracked_deadlines": len(DEADLINES),
+        "total_deadlines_unified": unified_total,
         "document_hashes_stored": len(state.get("document_hashes", {})),
         "feeds": {k: v["name"] for k, v in FEEDS.items()},
         "documents": {k: v["name"] for k, v in DOCUMENTS.items()},
@@ -4657,11 +4672,14 @@ async def get_status(params: GetStatusInput) -> str:
     lines = [
         "# PKI Compliance Monitor Status\n",
         f"**Last check:** {state.get('last_check', 'Never')}",
+        f"**Data version:** {COMPLIANCE_METADATA.get('dataVersion')} "
+        f"(data last updated {COMPLIANCE_METADATA.get('lastUpdated')})",
         f"**Data directory:** `{DATA_DIR}`\n",
         "## Tracked Sources\n",
         f"- **Feeds:** {len(FEEDS)}",
         f"- **Documents:** {len(DOCUMENTS)}",
-        f"- **Deadlines:** {len(DEADLINES)}\n",
+        f"- **Deadlines:** {len(DEADLINES)} in `DEADLINES`, "
+        f"{unified_total} total including regulatory frameworks\n",
         "### Feeds",
     ]
 
