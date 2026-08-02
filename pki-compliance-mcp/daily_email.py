@@ -291,7 +291,12 @@ def read_content_drafts(date_str: str) -> list[dict]:
 
 
 def read_approval(date_str: str) -> dict | None:
-    """Read auto_approve.py output (10:15 cron): approval log + review queue."""
+    """Read auto_approve.py output: approval log + review queue.
+
+    auto_approve runs chained after the 10:00 UTC research cron in the same
+    crontab line, so it has no fixed clock time — the fixed 10:15 slot was
+    removed 2026-07-09 because it raced the 20-30 min research run.
+    """
     log_p = DATA_DIR / f"approval_log_{date_str}.json"
     queue_p = DATA_DIR / f"review_queue_{date_str}.json"
     if not log_p.exists() and not queue_p.exists():
@@ -416,9 +421,9 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
     elif pending is None and auto_refresh.get("ran") and not auto_refresh.get("skipped"):
         parts.append(f"<p style='color:#b91c1c;font:13px/1.4 -apple-system,system-ui,sans-serif'>⚠ Research cron ran but pending_updates_{date_str}.json is missing.</p>")
 
-    # Auto-approve outcome (10:15 cron)
+    # Auto-approve outcome (chained after the 10:00 UTC research cron, no fixed slot)
     if approval is not None:
-        parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>Auto-approve (10:15 UTC)</h3>")
+        parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>Auto-approve (after the 10:00 UTC research run)</h3>")
         if approval.get("_parse_error"):
             parts.append(f"<p style='color:#b91c1c;font:13px/1.4 -apple-system,system-ui,sans-serif'>⚠ Could not parse auto-approve output: {escape(approval['_parse_error'])}</p>")
         else:

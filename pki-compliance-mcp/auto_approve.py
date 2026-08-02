@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Tiered auto-approval for pending compliance updates.
 
-Runs at 10:15 UTC, between the research cron (10:00, writes
-pending_updates_<date>.json) and the daily email (10:35), so the email can
-report "N applied automatically, M need your review".
+Runs chained immediately after the research cron (10:00, writes
+pending_updates_<date>.json) in the same crontab line, and before the daily
+email (10:35), so the email can report "N applied automatically, M need your
+review". No fixed clock time: the old fixed 10:15 slot raced the 20-30 min
+research run and silently no-opped, and was removed 2026-07-09.
 
 Per run:
   1. Reads ~/.pki-compliance-mcp/pending_updates_<date>.json (real schema:

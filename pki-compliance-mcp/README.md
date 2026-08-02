@@ -10,7 +10,7 @@ Runs on the DigitalOcean droplet at `/opt/mcp-servers/pki-compliance-mcp`, serve
 |------|---------|
 | `pki_compliance_mcp.py` | MCP server + HTTP API. All compliance data lives inline here (no database): `DEADLINES`, `REGULATORY_FRAMEWORKS`, `CABF_DOCUMENTS`, root stores, CA chains, etc. |
 | `compliance_auto_refresh.py` | Daily research cron: cost gate → Claude research with web search → diff analysis → dedup → pending-updates file for review. |
-| `auto_approve.py` | Tiered auto-approval (10:15 UTC): applies low-risk proposals automatically, queues the rest. Fail-safe: queues everything if the repo is dirty or git push is unavailable. |
+| `auto_approve.py` | Tiered auto-approval (chained after the 10:00 UTC research run, no fixed slot): applies low-risk proposals automatically, queues the rest. Fail-safe: queues everything if the repo is dirty or git push is unavailable. |
 | `daily_doc_check.sh` | Daily document hash check (refreshes document version state in the MCP container). |
 | `daily_email.py` | Morning summary email via Resend. |
 | `deploy.sh` | Pull + pip install + restart the systemd service (run on the droplet). |
@@ -82,7 +82,7 @@ Each `DEADLINES` entry:
 
 ## Reviewing proposals (the only routine human task)
 
-Low-risk proposals are applied automatically at 10:15 (see above); the morning email tells you what was applied and what's queued. For queued items in `review_queue_<date>.json`:
+Low-risk proposals are applied automatically right after the research run (see above); the morning email tells you what was applied and what's queued. For queued items in `review_queue_<date>.json`:
 
 **Accept a proposed deadline**
 1. Verify the proposal's `source_url` actually supports the date (open the link).
@@ -185,3 +185,16 @@ Data-only changes here flow to the site automatically (after cache expiry). Fron
 | `/api/news`, `/api/news/sources`, `/api/news/refresh` | News feed aggregation |
 
 MCP tools (`pki_get_deadlines`, `pki_check_all_documents`, etc.) expose the same data over SSE for Claude clients.
+
+### Two-runtime drift check
+
+The systemd API reads `pki_compliance_mcp.py` from disk; the Docker MCP on :8085 **bakes it into its image**. A bare `systemctl restart` updates one and not the other, and the stale side has no visible symptom — that gap served two-day-old data from 2026-07-29 and produced a confident, wrong "the droplet is behind" report.
+
+Two guards, both needed:
+
+- **At deploy time** — `deploy.sh` deploys both runtimes and exits 1 if their `dataVersion|unified` differ.
+- **At read time** — `pki_get_status` fetches the live API's `/status` and returns `api_data_version`, `api_total_deadlines_unified` and `runtimes_agree`. A caller with no droplet shell gets the whole cross-check in one call; `runtimes_agree: false` means the MCP is stale and `pki_get_deadlines` should not be trusted until a redeploy. Unreachable API degrades to `"unknown"`, never to a false drift signal.
+
+The API's own `/status` skips the probe (`_SERVING_PEER_API`) — it *is* the URL being fetched, so probing would recurse through nginx.
+
+**`tracked_deadlines` (75) vs `total_deadlines_unified` (101) is not drift.** The first counts `DEADLINES` only and structurally excludes `REGULATORY_FRAMEWORKS`; only the second is comparable to the API's deadline list. Both are returned deliberately — see the 2026-08-01 decision in `HANDOFF-LOG.md`.

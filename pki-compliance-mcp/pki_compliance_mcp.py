@@ -4616,6 +4616,82 @@ async def get_framework(params: GetFrameworkInput) -> str:
 
     return "\n".join(lines)
 
+
+# Set true in main() when this process IS the systemd API serving /status.
+# That route calls get_status() directly, so leaving the peer fetch enabled
+# there would have the API call itself back through nginx, recursively.
+# Only the Docker MCP — the runtime that can actually go stale — probes.
+_SERVING_PEER_API = False
+
+PEER_API_STATUS_URL = "https://compliance-api.fixmycert.com/status"
+
+
+async def _peer_api_status(unified_total: int) -> dict:
+    """Compare this runtime's data_version against the live API's.
+
+    The Docker container bakes pki_compliance_mcp.py into its image while the
+    systemd API reads it from disk, so the two drift silently — as they did for
+    two days from 2026-07-29, which produced a confident, wrong "the droplet is
+    behind" report. deploy.sh now fails on drift, but a container started any
+    other way can still be stale, so the check is worth having at read time.
+
+    Best-effort by design: a network blip must degrade to "unknown", never
+    error the tool or make a caller think it found drift.
+    """
+    if _SERVING_PEER_API:
+        return {"peer_api_check": "skipped (this process is the API)"}
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            r = await client.get(PEER_API_STATUS_URL, headers={"Cache-Control": "no-cache"})
+            r.raise_for_status()
+            peer = r.json()
+    except Exception as e:
+        return {
+            "peer_api_check": f"unavailable: {type(e).__name__}",
+            "runtimes_agree": "unknown",
+        }
+
+    peer_version = peer.get("data_version")
+    peer_unified = peer.get("total_deadlines_unified")
+    agree = (
+        peer_version == COMPLIANCE_METADATA.get("dataVersion")
+        and peer_unified == unified_total
+    )
+
+    out = {
+        "peer_api_check": PEER_API_STATUS_URL,
+        "api_data_version": peer_version,
+        "api_total_deadlines_unified": peer_unified,
+        "runtimes_agree": agree,
+    }
+    if not agree:
+        out["drift_warning"] = (
+            "This MCP and the live API disagree. This process is serving stale "
+            "code — do not trust pki_get_deadlines until the container is rebuilt "
+            "(run pki-compliance-mcp/deploy.sh on the droplet)."
+        )
+    return out
+
+
+def _peer_status_line(peer: dict) -> str:
+    """One-line rendering of the drift cross-check for the markdown format."""
+    agree = peer.get("runtimes_agree")
+    if agree is True:
+        return (
+            f"**Runtime cross-check:** agrees with the live API "
+            f"({peer.get('api_data_version')}, "
+            f"{peer.get('api_total_deadlines_unified')} unified)\n"
+        )
+    if agree is False:
+        return (
+            f"**⚠ Runtime cross-check: DRIFT.** This process is at "
+            f"{COMPLIANCE_METADATA.get('dataVersion')}; the live API is at "
+            f"{peer.get('api_data_version')}. {peer['drift_warning']}\n"
+        )
+    return f"**Runtime cross-check:** {peer.get('peer_api_check')}\n"
+
+
 @mcp_tool(
     name="pki_get_status",
     annotations={
@@ -4646,6 +4722,7 @@ async def get_status(params: GetStatusInput) -> str:
     # no shell on the droplet (Cowork) compare this against the live API's
     # dataVersion and self-diagnose a stale container instead of guessing.
     unified_total = len(get_all_deadlines_unified())
+    peer = await _peer_api_status(unified_total)
 
     result = {
         "last_check": state.get("last_check"),
@@ -4660,6 +4737,12 @@ async def get_status(params: GetStatusInput) -> str:
         "tracked_deadlines": len(DEADLINES),
         "total_deadlines_unified": unified_total,
         "document_hashes_stored": len(state.get("document_hashes", {})),
+        # Two-runtime drift cross-check, resolved server-side. Cowork cannot
+        # web_fetch the API's /status (URL-provenance rule refuses a URL read
+        # out of a project file), so it could report this side's data_version
+        # but never compare it. Doing the comparison here makes the whole
+        # check one MCP call. See runtimes_agree for the verdict.
+        **peer,
         "feeds": {k: v["name"] for k, v in FEEDS.items()},
         "documents": {k: v["name"] for k, v in DOCUMENTS.items()},
         "data_directory": str(DATA_DIR),
@@ -4675,6 +4758,7 @@ async def get_status(params: GetStatusInput) -> str:
         f"**Data version:** {COMPLIANCE_METADATA.get('dataVersion')} "
         f"(data last updated {COMPLIANCE_METADATA.get('lastUpdated')})",
         f"**Data directory:** `{DATA_DIR}`\n",
+        _peer_status_line(peer),
         "## Tracked Sources\n",
         f"- **Feeds:** {len(FEEDS)}",
         f"- **Documents:** {len(DOCUMENTS)}",
@@ -5287,6 +5371,9 @@ if __name__ == "__main__":
         print(f"PKI Compliance MCP server (SSE) on http://0.0.0.0:{port}")
         mcp.run(transport="sse")
     elif use_simple_http or os.environ.get("REPLIT_DEPLOYMENT"):
+        # This process IS the API behind compliance-api.fixmycert.com, so its
+        # /status must not fetch that URL — it would call itself through nginx.
+        globals()["_SERVING_PEER_API"] = True
         # Simple HTTP server for Replit / systemd API mode.
         # ThreadingHTTPServer (not HTTPServer) — single-threaded server hangs on
         # any slow/stuck handler, taking out the whole API. Public endpoint sees
