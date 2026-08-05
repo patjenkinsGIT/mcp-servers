@@ -23,7 +23,7 @@ Host crontab (root), Mondays 15:00 UTC — needs the admin secret for the read:
     0 15 * * 1 cd /opt/mcp-servers/fixmycert-news-mcp && set -a && . /opt/mcp-servers/.env && set +a && /usr/bin/python3 news_gap_check.py >> /root/.pki-compliance-mcp/news_gap_check.log 2>&1
 
 Env (all already in /opt/mcp-servers/.env):
-  NEWS_API_BASE_URL   required, e.g. https://fixmycert.com
+  NEWS_API_BASE_URL   optional, defaults to https://fixmycert.com (as docker-compose does)
   NEWS_ADMIN_SECRET   required — read-only use here (GET /api/news/admin)
   RESEND_API_KEY      required unless --stdout/--json
   NEWS_EMAIL_TO       default patrick@fixmycert.com
@@ -46,6 +46,8 @@ from html import escape
 import httpx
 
 COMPLIANCE_DATA_URL = "https://compliance-api.fixmycert.com/api/compliance-data"
+# Same default as docker-compose.yml — NEWS_API_BASE_URL is not in .env
+DEFAULT_BASE_URL = "https://fixmycert.com"
 DEFAULT_TO = "patrick@fixmycert.com"
 DEFAULT_FROM = "noreply@mail.fixmycert.com"
 
@@ -325,12 +327,11 @@ def main() -> int:
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     print(f"--- news gap check {stamp} ---")
 
-    base_url = os.environ.get("NEWS_API_BASE_URL", "").rstrip("/")
+    base_url = (os.environ.get("NEWS_API_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
     secret = os.environ.get("NEWS_ADMIN_SECRET", "")
     try:
-        if not base_url or not secret:
-            raise FetchError("NEWS_API_BASE_URL and NEWS_ADMIN_SECRET must be set "
-                             "(source /opt/mcp-servers/.env)")
+        if not secret:
+            raise FetchError("NEWS_ADMIN_SECRET must be set (source /opt/mcp-servers/.env)")
         with httpx.Client(timeout=30, follow_redirects=True) as client:
             deadlines = fetch_deadlines(client)
             first_party = fetch_first_party(client, base_url, secret)
