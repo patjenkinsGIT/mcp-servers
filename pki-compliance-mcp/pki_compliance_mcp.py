@@ -51,8 +51,12 @@ CACHE_FILE = DATA_DIR / "cache.json"
 FEEDS = {
     "cabforum_public": {
         "name": "CA/Browser Forum Public List",
-        "url": "https://lists.cabforum.org/pipermail/public/",
-        "type": "mailman_archive",
+        # The old pipermail archive (lists.cabforum.org) is gone, not merely frozen:
+        # DNS resolves but 80/443 time out and ICMP is dropped (checked 2026-08-05 from
+        # two networks). Current traffic and the full public archive live on Google Groups,
+        # which is readable anonymously.
+        "url": "https://groups.google.com/a/groups.cabforum.org/g/public",
+        "type": "google_group",
         "priority": "high",
     },
     "ccadb_public": {
