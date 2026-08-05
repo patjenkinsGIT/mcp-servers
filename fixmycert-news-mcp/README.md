@@ -95,11 +95,19 @@ Two things about it are load-bearing:
   succeeded: the cloud sandbox proxy denies CONNECT to fixmycert hosts (explicit 403 on
   `compliance-api.fixmycert.com`, 2026-07-23). Adding both hosts to the routine allowlist
   did not fix it. Don't move it back.
-- **Coverage is judged against the admin feed, not the public one.** 17 first-party items
-  are archived, 10 deliberately (the 2026-07-22 editorial pre-screen dropped general
-  cyber-regulation items to keep /news PKI-core). Archived means *decided*, not missing.
-  Judging against the public feed reports those 10 as fresh gaps every week — the old cloud
-  routine did exactly that. This is also why the script agrees with `news_get_uncovered`.
+- **Coverage is judged against the admin feed, not the public one.** 18 first-party items
+  are archived as of 2026-08-05, 11 deliberately: the 2026-07-22 editorial pre-screen
+  dropped general cyber-regulation items to keep /news PKI-core, and `nis2-netherlands-cbw`
+  joined them 2026-08-05. Archived means *decided*, not missing. Judging against the public
+  feed reports every one of them as a fresh gap each week — the old cloud routine did
+  exactly that. This is also why the script agrees with `news_get_uncovered`.
+
+**Editorial scope for /news is PKI-core.** NIS2 national implementation dates, UK CSR
+stages, DORA and NSPM-12 are tracked as Hub deadlines but deliberately not covered here:
+Italy (×2), Austria, Luxembourg and the EU-CyCLONe report were archived 2026-07-22, and the
+Netherlands Cbw followed on 2026-08-05 after being drafted and reconsidered. If a future
+gap-check flags a national NIS2 date, archiving the draft is the established answer, not
+publishing it.
 
 **Firewall note**: all six MCP ports (8081–8086) have been Tailscale-only since 2026-07-23
 (`/usr/local/sbin/mcp-firewall.sh`, persisted by `mcp-firewall.service`). The gap-check is

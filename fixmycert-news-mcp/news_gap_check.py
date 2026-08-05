@@ -8,11 +8,12 @@ port. Replaces the claude.ai cloud routine trig_01KtjShXBbnXayCAKLgC1LJo
 denies CONNECT to fixmycert hosts (403, seen 2026-07-23).
 
 Coverage is judged against the ADMIN feed, so results match the news MCP's
-`news_get_uncovered` exactly. That matters: 17 first-party items are archived,
-10 of them deliberately (the 2026-07-22 editorial pre-screen dropped general
-cyber-regulation items to keep /news PKI-core). Archived means "decided", not
-"missing" — judging against the public feed instead re-reports those 10 as gaps
-every single week. The matching logic below is a copy of server.py's
+`news_get_uncovered` exactly. That matters: 18 first-party items are archived
+as of 2026-08-05, 11 of them deliberately — the 2026-07-22 editorial pre-screen
+dropped general cyber-regulation items to keep /news PKI-core, and
+nis2-netherlands-cbw joined them 2026-08-05. Archived means "decided", not
+"missing" — judging against the public feed instead re-reports every one of
+them as a fresh gap each week. The matching logic below is a copy of server.py's
 `_compute_uncovered` and must be kept in step with it.
 
 Items covering a deadline only as an unpublished draft get their own section:
