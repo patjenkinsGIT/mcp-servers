@@ -71,17 +71,39 @@ Rollout was tranched to avoid a bot-like publish burst: tranche 1 (9 near-term 2
 published 2026-07-22; tranches 2 (8), 3a (15), 3b (22) auto-publish via one-time cloud
 routines on Jul 24 / 27 / 30, each stamping `publishedAt` to its run date.
 
-## Automation (claude.ai/code routines)
+## Automation
 
-| Routine | Schedule | What it does |
-|---------|----------|--------------|
-| Publish tranche 2 / 3a / 3b | one-time: Jul 24 / 27 / 30 2026, 14:00 UTC | Stamps `publishedAt`, publishes its fixed ID list via this MCP server (public port), verifies against `/api/news` |
-| Weekly gap-check | Mondays 15:00 UTC | Read-only report: uncovered Hub deadlines + feed health, built ONLY on the public APIs (no MCP port, survives firewalling) |
+Publishing is done — all 54 approved first-party drafts went out by 2026-07-27 (tranche 1
+locally, 2 locally after the cloud run published nothing, 3a+3b locally over Tailscale).
+The three one-time publish routines and their local backstop tasks are spent.
 
-**Security TODO after Jul 30, 2026**: this MCP server listens unauthenticated on the
-droplet's public IP (134.199.198.164:8086) — anyone who finds it can publish to the live
-feed. The publish routines depend on that; once they've fired, firewall 8086 (and ideally
-8084/8085) to the Tailscale network. The weekly gap-check is unaffected.
+The one standing job is the **weekly gap-check**, `news_gap_check.py`, a droplet cron:
+
+```
+0 15 * * 1  # Mondays 15:00 UTC — see the script's docstring for the full crontab line
+```
+
+Read-only report, emailed via Resend: Hub deadlines with no first-party coverage, deadlines
+covered only by an unpublished draft, and feed health (item counts + a stall warning if the
+aggregator's `updatedAt` goes >48h without moving). A fetch failure emails too, so a silent
+Monday always means "checked and clean", never "never ran".
+
+Two things about it are load-bearing:
+
+- **It runs on the droplet, not in the cloud.** It was a claude.ai routine
+  (`trig_01KtjShXBbnXayCAKLgC1LJo`) from 2026-07-22 until 2026-08-05, and never once
+  succeeded: the cloud sandbox proxy denies CONNECT to fixmycert hosts (explicit 403 on
+  `compliance-api.fixmycert.com`, 2026-07-23). Adding both hosts to the routine allowlist
+  did not fix it. Don't move it back.
+- **Coverage is judged against the admin feed, not the public one.** 17 first-party items
+  are archived, 10 deliberately (the 2026-07-22 editorial pre-screen dropped general
+  cyber-regulation items to keep /news PKI-core). Archived means *decided*, not missing.
+  Judging against the public feed reports those 10 as fresh gaps every week — the old cloud
+  routine did exactly that. This is also why the script agrees with `news_get_uncovered`.
+
+**Firewall note**: all six MCP ports (8081–8086) have been Tailscale-only since 2026-07-23
+(`/usr/local/sbin/mcp-firewall.sh`, persisted by `mcp-firewall.service`). The gap-check is
+unaffected — it talks to the public HTTPS API, never to port 8086.
 
 ## Backing API
 
