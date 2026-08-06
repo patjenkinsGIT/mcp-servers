@@ -289,6 +289,42 @@ If no changes are found, return:
 """
 
 
+def _save_raw_diff(text: str, why: str, stamp: str) -> Path | None:
+    """Persist an unparseable diff response so the failure is diagnosable.
+
+    Returns the path written, or None if even that failed — a diagnostic write
+    must never be the thing that kills the run."""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        path = DATA_DIR / f"diff_raw_{stamp}.txt"
+        path.write_text(f"# unparseable diff response: {why}\n# {len(text)} chars\n\n{text}")
+        log(f"Raw diff response saved for diagnosis: {path} ({why})")
+        return path
+    except Exception as e:  # pragma: no cover - defensive
+        log(f"WARNING: could not save raw diff response ({e})")
+        return None
+
+
+def _diff_failure_marker(text: str, saved: Path | None, stamp: str) -> str:
+    """Short human-readable stand-in for the raw response in the review file.
+
+    Leads with the run stamp deliberately. This string becomes a
+    needs_human_review item, and _review_sig() falls back to the first 12
+    normalized words when an item carries no anchors — so a marker with fixed
+    leading words would give two consecutive failures the same signature and
+    dedup_changes would drop the second as "re-flagged", silencing a recurring
+    fault after day one. Deduping repeated CONTENT proposals is the point of
+    that machinery; deduping a repeated FAULT report is not. The stamp is
+    unique per run, so every failure reports."""
+    where = f" Full text: {saved}" if saved else " Full text could not be saved."
+    excerpt = " ".join(text.split())[:400] if text.strip() else "(empty response)"
+    return (
+        f"Diff response unparseable at {stamp} — {len(text)} chars, "
+        f"no proposals could be extracted from this run.{where} "
+        f"First 400 chars: {excerpt}"
+    )
+
+
 def analyze_diff(research_results: dict, current_data: dict | None) -> dict:
     """Ask Claude to analyze research findings vs current data."""
     current_summary = "Current data not available (API unreachable)"
@@ -335,11 +371,39 @@ def analyze_diff(research_results: dict, current_data: dict | None) -> dict:
             block["text"] for block in data["content"] if block["type"] == "text"
         )
 
-    # Extract JSON from response
+    # Extract JSON from response.
+    #
+    # The brace-less response is the RARE failure; a response that contains
+    # braces but is not valid JSON is the likely one, and it used to be
+    # unguarded. On 2026-08-06 json.loads raised JSONDecodeError here
+    # ("Expecting ',' delimiter: line 87 column 6"), propagated to main, and
+    # exited 1 before any review file was written — discarding 192k chars of
+    # research that had already been paid for and, because the staleness clock
+    # had been reset moments earlier, buying up to 7 days of silence on the
+    # day the Microsoft August 2026 deployment notice landed.
+    #
+    # Both parse failures now land in the same degraded return, and the raw
+    # text goes to disk either way: the in-payload copy is truncated (a 7KB
+    # blob renders badly in the daily email) and the full text is the
+    # diagnostic artifact. 2026-08-02 showed why disk matters — that day's
+    # response was empty, the sanitizer dropped it as "malformed (empty)", and
+    # the failure left no trace anywhere.
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
     json_match = re.search(r"\{[\s\S]*\}", text)
     if json_match:
-        return json.loads(json_match.group())
-    return {"summary": "Could not parse diff response", "needs_human_review": [text]}
+        try:
+            return json.loads(json_match.group())
+        except json.JSONDecodeError as e:
+            saved = _save_raw_diff(text, f"JSONDecodeError: {e}", stamp)
+            return {
+                "summary": f"Could not parse diff response — malformed JSON ({e})",
+                "needs_human_review": [_diff_failure_marker(text, saved, stamp)],
+            }
+    saved = _save_raw_diff(text, "no JSON object found in response", stamp)
+    return {
+        "summary": "Could not parse diff response — no JSON object found",
+        "needs_human_review": [_diff_failure_marker(text, saved, stamp)],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1013,9 +1077,16 @@ def main():
     # Reset the staleness clock only if research actually produced results —
     # otherwise the weekly safety net keeps retrying (a retired model 404'ing
     # every call must not count as "research ran").
-    if any(not str(v).startswith("Error:") for v in research_results.values()):
-        mark_research_ran()
-    else:
+    #
+    # The clock is NOT reset here, only decided here. It is marked once the run
+    # has actually produced output, because the same reasoning extends one step
+    # further down: on 2026-08-06 research succeeded, the clock was reset, and
+    # then the diff step died before writing a review file — so the run
+    # produced nothing while still counting as "research ran", and the next
+    # six days would have skipped. A run that dies before it has output must
+    # leave the safety net armed.
+    research_ok = any(not str(v).startswith("Error:") for v in research_results.values())
+    if not research_ok:
         log("All research queries failed — NOT marking research as ran (safety net stays armed)")
 
     if args.query_only:
@@ -1025,6 +1096,9 @@ def main():
             print(f"  {qid}")
             print(f"{'='*60}")
             print(text)
+        # Query-only produced its output on stdout; that counts.
+        if research_ok:
+            mark_research_ran()
         log("Done (query-only)")
         return
 
@@ -1100,6 +1174,12 @@ def main():
     review_file = DATA_DIR / f"pending_updates_{today}.json"
     review_file.write_text(json.dumps(changes, indent=2))
     log(f"Review file written: {review_file}")
+
+    # The run has produced output — now the research counts as having happened.
+    # Deliberately after the write, not before: see the note at the gate above.
+    # --dry-run never reaches here, so a dry run does not consume the clock.
+    if research_ok:
+        mark_research_ran()
 
     if not args.auto_apply:
         summary_lines.append(f"Mode: review")
