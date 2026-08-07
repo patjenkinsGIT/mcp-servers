@@ -147,6 +147,25 @@ DOCUMENTS = {
         "url": "https://csrc.nist.gov/publications/detail/sp/800-131a/rev-2/final",
         "priority": "high",
     },
+    "microsoft_release_notes": {
+        # Added 2026-08-07. Microsoft's monthly DEPLOYMENT NOTICES land at
+        # trusted-root/YYYY/<month>-YYYY.md — a path that churns every month and
+        # so cannot be a stable tracked URL. Release Notes.md is the repo-root
+        # INDEX that gets one row per notice (back to 2019), so it changes
+        # whenever a notice is published while keeping a fixed path.
+        # Why this exists: the August 2026 notice (release 2026-08-25, NotBefore
+        # 2026-09-15 — the largest root-store change tracked here) reached us
+        # only via the GitHub-commits feed. No tracked document covered it —
+        # microsoft_root_program hashes Requirements.md and
+        # microsoft_root_announcements hashes Announcements.md. This index was
+        # committed 2026-08-05T18:37:16Z, 19 minutes before that Announcements
+        # change, so tracking it would have caught the notice on its own.
+        # NOTE the space in the filename must stay percent-encoded as %20.
+        "name": "Microsoft Trusted Root Program Release Notes",
+        "url": "https://github.com/TrustedRootProgram/Program-Requirements/blob/main/Release%20Notes.md",
+        "check_url": "https://raw.githubusercontent.com/TrustedRootProgram/Program-Requirements/main/Release%20Notes.md",
+        "priority": "high",
+    },
     "nist_800_57": {
         "name": "NIST SP 800-57 (Key Management)",
         "url": "https://csrc.nist.gov/publications/detail/sp/800-57-part-1/rev-5/final",
@@ -3724,7 +3743,14 @@ class CheckDocumentInput(BaseModel):
         ...,
         description="Document ID to check. Available: cabf_br, chrome_root_policy, "
                     "mozilla_root_policy, apple_root_program, microsoft_root_program, "
+                    "microsoft_root_announcements, microsoft_release_notes, "
                     "nist_800_131a, nist_800_57"
+    )
+    persist: bool = Field(
+        default=True,
+        description="Write the new hash to state. TRUE (default) makes this a "
+                    "CONSUMING read: the next caller will see 'unchanged'. Pass "
+                    "False to peek without consuming the change for other callers."
     )
     response_format: ResponseFormat = Field(
         default=ResponseFormat.MARKDOWN,
@@ -3738,6 +3764,12 @@ class CheckAllDocumentsInput(BaseModel):
     priority: Optional[str] = Field(
         default=None,
         description="Filter by priority: 'high', 'medium', or None for all"
+    )
+    persist: bool = Field(
+        default=True,
+        description="Write the new hashes to state. TRUE (default) makes this a "
+                    "CONSUMING read: the next caller will see 'unchanged'. Pass "
+                    "False to peek without consuming changes for other callers."
     )
     response_format: ResponseFormat = Field(
         default=ResponseFormat.MARKDOWN,
@@ -4356,7 +4388,9 @@ async def check_document(params: CheckDocumentInput) -> str:
         state["document_hashes"] = {}
     state["document_hashes"][params.document_id] = current_hash
     state["last_check"] = datetime.now(timezone.utc).isoformat()
-    save_state(state)
+    # See the note in check_all_documents: saving is what makes this consuming.
+    if params.persist:
+        save_state(state)
 
     result = {
         "document_id": params.document_id,
@@ -4456,7 +4490,19 @@ async def check_all_documents(params: CheckAllDocumentsInput) -> str:
         })
 
     state["last_check"] = datetime.now(timezone.utc).isoformat()
-    save_state(state)
+    # Persisting is what makes this a CONSUMING read: once the new hashes are
+    # written, the NEXT caller sees "unchanged". Two schedulers call this 30
+    # minutes apart on the same container — the 10:00 research gate (via
+    # docker exec, compliance_auto_refresh._DETECT_SNIPPET) and then the 10:30
+    # daily_doc_check — so an unconditional save meant the gate silently ate
+    # every change before the doc-check could report it to the daily email.
+    # Verified twice: 2026-08-02 (gate fired on apple_root_program, that
+    # morning's doc-check recorded changes_detected: 0) and 2026-08-06 (gate
+    # fired on microsoft_root_announcements, doc-check reported it unchanged
+    # at the post-change hash). Readers pass persist=False; only the scheduled
+    # doc-check should consume.
+    if params.persist:
+        save_state(state)
 
     if params.response_format == ResponseFormat.JSON:
         return json.dumps({

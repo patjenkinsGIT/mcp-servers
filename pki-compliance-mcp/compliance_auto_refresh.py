@@ -503,11 +503,18 @@ def log(message: str):
 
 # Pure-JSON one-liner run inside the MCP container; reuses the same machinery
 # as daily_doc_check.sh. Prints the check_all_documents JSON to stdout.
+# persist=False is load-bearing, not a tidy-up. check_all_documents WRITES the
+# new hashes and saves unless told otherwise, so this gate — which runs at 10:00
+# against the same container the 10:30 daily_doc_check uses — used to consume
+# every change before the doc-check could report it to the daily email. The
+# email then said "0 doc hash changes" on precisely the days a document changed
+# (2026-08-02 apple_root_program, 2026-08-06 microsoft_root_announcements).
+# The gate only needs to READ; the 10:30 check is what should consume.
 _DETECT_SNIPPET = (
     "import asyncio;"
     "from pki_compliance_mcp import check_all_documents,CheckAllDocumentsInput,ResponseFormat;"
     "print(asyncio.run(check_all_documents("
-    "CheckAllDocumentsInput(response_format=ResponseFormat.JSON))))"
+    "CheckAllDocumentsInput(persist=False,response_format=ResponseFormat.JSON))))"
 )
 
 
