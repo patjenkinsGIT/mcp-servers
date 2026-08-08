@@ -806,7 +806,9 @@ CONTENT_CANDIDATE_RULES = [
         r"|proposal for a (regulation|directive)|draft (eu )?(regulation|directive)"
         r"|com\(\d{4}\)\s*\d+", re.IGNORECASE)),
     ("enforcement-action", re.compile(
-        r"cjeu referral|referr(ed|al|ing)[^.]{0,60}court of justice"
+        # cjeu[-\s]: ids arrive hyphenated ("nis2-cjeu-referral-..."), and the
+        # 2026-07-21 flag was missed on exactly that (space-only pattern).
+        r"cjeu[-\s]referral|referr(ed|al|ing)[^.]{0,80}\b(cjeu|court of justice)"
         r"|infringement proceeding|reasoned opinion|letter of formal notice",
         re.IGNORECASE)),
     ("draft-standard-comment-period", re.compile(

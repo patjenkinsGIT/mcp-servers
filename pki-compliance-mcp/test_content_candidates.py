@@ -60,6 +60,12 @@ hit = car._content_rule_match(cjeu_item)
 check("CJEU referral fires enforcement-action",
       hit is not None and hit[0] == "enforcement-action")
 
+# The 2026-07-21 real-data miss: hyphenated id, "referral ... to the CJEU"
+hit = car._content_rule_match({"id": "nis2-cjeu-referral-laggard-states",
+                               "description": "Commission escalates referral of laggard states to the CJEU"})
+check("hyphenated cjeu-referral id fires enforcement-action (2026-07-21 regression)",
+      hit is not None and hit[0] == "enforcement-action")
+
 ipd_item = {"id": "nist-sp-800-x", "description":
             "NIST released the initial public draft of new key management guidance"}
 hit = car._content_rule_match(ipd_item)
