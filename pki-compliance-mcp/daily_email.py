@@ -36,6 +36,14 @@ DASHBOARD_URL = "https://compliance-api.fixmycert.com/dashboard"
 DEFAULT_TO = "patrick@fixmycert.com"
 DEFAULT_FROM = "noreply@mail.fixmycert.com"
 
+# Part A safety window (added 2026-08-07): surface content candidates in this
+# email while the classifier is new, so misclassified Tier 1 items are caught
+# by eye instead of discovered when a deadline passes. Flip to False in this
+# one place to stop surfacing them once the classifier has earned trust.
+# Rows stuck `pending` in the sink ledger are shown REGARDLESS of this flag —
+# a candidate the news desk never received must stay visible somewhere.
+SURFACE_CONTENT_CANDIDATES = True
+
 
 def today_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -170,6 +178,53 @@ def outstanding_review_items(date_str: str, days: int = 14) -> list[dict]:
                 ][:3]
     return sorted((v for k, v in seen.items() if k not in rejected_sigs),
                   key=lambda x: (not x["urgent"], x["first_seen"]))
+
+
+def read_content_candidates(date_str: str, pending: dict | None) -> dict:
+    """Content-candidate state for the email: today's candidates (from the
+    pending file) with their sink status, plus any ledger rows still pending
+    delivery from earlier runs (a stuck row means the news desk never got it).
+    """
+    try:
+        ledger = json.loads((DATA_DIR / "content_candidates.json").read_text())
+        if not isinstance(ledger, dict):
+            ledger = {}
+    except Exception:
+        ledger = {}
+
+    import compliance_auto_refresh as car
+
+    today = []
+    today_sigs = set()
+    if pending and "_parse_error" not in pending:
+        for it in pending.get("content_candidates", []):
+            if not isinstance(it, dict):
+                continue
+            sig = car._review_sig(it)
+            today_sigs.add(sig)
+            row = ledger.get(sig) if isinstance(ledger.get(sig), dict) else {}
+            today.append({
+                "title": (it.get("title") or it.get("topic") or it.get("id")
+                          or (it.get("description") or "")[:80]),
+                "rule": it.get("content_rule", "?"),
+                "matched": it.get("content_rule_matched", ""),
+                "sink_status": row.get("sink_status", "not recorded"),
+                "news_id": row.get("news_id", ""),
+                "primary_url": it.get("primary_url")
+                               or next(iter(it.get("provenance_urls") or []), ""),
+            })
+
+    stuck = []
+    for sig, row in ledger.items():
+        if (isinstance(row, dict) and row.get("sink_status") == "pending"
+                and sig not in today_sigs):
+            stuck.append({
+                "title": row.get("title", sig),
+                "rule": row.get("rule", "?"),
+                "first_seen": row.get("first_seen", "?"),
+                "attempts": row.get("attempts", 0),
+            })
+    return {"today": today, "stuck_pending": stuck}
 
 
 def read_log_today(path: Path, date_str: str) -> list[str]:
@@ -314,7 +369,7 @@ def read_approval(date_str: str) -> dict | None:
     return out
 
 
-def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None, drafts: list[dict] | None = None) -> str:
+def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None, drafts: list[dict] | None = None, candidates: dict | None = None) -> str:
     """Build the HTML email body. Plain-text fallback is built separately."""
     parts = []
     parts.append(f"<h2 style='margin:0 0 12px 0;font:600 18px/1.3 -apple-system,system-ui,sans-serif'>PKI Compliance daily report — {date_str}</h2>")
@@ -468,6 +523,37 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
             parts.append(f"<li>{escape(label[:300])}{src_part}</li>")
         parts.append("</ul>")
 
+    # Content candidates — the fifth pipeline state (no date certain → content,
+    # not a deadline). Today's classifications are shown while
+    # SURFACE_CONTENT_CANDIDATES is on (the Part A safety window); rows the
+    # news desk never received (sink_status pending) are shown unconditionally.
+    if candidates:
+        today_cc = candidates.get("today") or []
+        stuck_cc = candidates.get("stuck_pending") or []
+        if today_cc and SURFACE_CONTENT_CANDIDATES:
+            parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>🗞 Content candidates (new state — check nothing here is a real deadline)</h3>")
+            parts.append("<ul style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding-left:20px'>")
+            for c in today_cc:
+                sink = c.get("sink_status", "?")
+                sink_icon = {"posted": "✅ drafted in news desk", "pending": "⏳ delivery pending"}.get(sink, sink)
+                link = ""
+                if c.get("primary_url"):
+                    link = f" — <a href='{escape(c['primary_url'], quote=True)}' style='color:#2563eb'>source</a>"
+                parts.append(
+                    f"<li><strong>{escape(str(c['title'])[:200])}</strong> "
+                    f"<em>[rule: {escape(c.get('rule', '?'))}]</em> — {escape(sink_icon)}{link}"
+                    + (f"<br><span style='color:#64748b;font-size:12px'>matched: {escape(str(c.get('matched'))[:120])}</span>" if c.get("matched") else "")
+                    + "</li>")
+            parts.append("</ul>")
+            parts.append("<p style='font:12px/1.4 -apple-system,system-ui,sans-serif;color:#666;margin-top:4px'>These never enter the review queue. A real Tier 1 item in this list is a misclassification — reply/flag it. Toggle: SURFACE_CONTENT_CANDIDATES in daily_email.py.</p>")
+        if stuck_cc:
+            parts.append("<p style='font:600 13px/1.4 -apple-system,system-ui,sans-serif;color:#b45309'>⚠ "
+                         f"{len(stuck_cc)} content candidate(s) still awaiting news-desk delivery:</p>")
+            parts.append("<ul style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding-left:20px;color:#b45309'>")
+            for c in stuck_cc:
+                parts.append(f"<li>{escape(str(c['title'])[:200])} — first seen {escape(str(c['first_seen']))}, {c.get('attempts', 0)} delivery attempt(s). Check NEWS_API_BASE_URL/NEWS_ADMIN_SECRET in the cron env.</li>")
+            parts.append("</ul>")
+
     # Doc URL change detail (when there are any)
     if doc_check.get("ran") and doc_check.get("docs"):
         changed_or_new = [d for d in doc_check["docs"] if d["status"] in ("changed", "new")]
@@ -511,8 +597,22 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
     return "<div style='max-width:640px'>" + "".join(parts) + "</div>"
 
 
-def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None, drafts: list[dict] | None = None) -> str:
+def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None, drafts: list[dict] | None = None, candidates: dict | None = None) -> str:
     lines = [f"PKI Compliance daily report — {date_str}", "=" * 60, ""]
+
+    if candidates:
+        today_cc = candidates.get("today") or []
+        stuck_cc = candidates.get("stuck_pending") or []
+        if today_cc and SURFACE_CONTENT_CANDIDATES:
+            lines.append(f"CONTENT CANDIDATES ({len(today_cc)}) — new state, check nothing is a real deadline:")
+            for c in today_cc:
+                lines.append(f"  - [{c.get('rule', '?')}] {str(c['title'])[:120]} ({c.get('sink_status', '?')})")
+            lines.append("")
+        if stuck_cc:
+            lines.append(f"WARNING: {len(stuck_cc)} content candidate(s) awaiting news-desk delivery:")
+            for c in stuck_cc:
+                lines.append(f"  - {str(c['title'])[:120]} (first seen {c.get('first_seen')}, {c.get('attempts', 0)} attempts)")
+            lines.append("")
 
     if drafts:
         lines.append(f"CONTENT DRAFTS READY ({len(drafts)}):")
@@ -597,17 +697,26 @@ def main() -> int:
         print(f"WARNING: content-drafts read failed: {e}", file=sys.stderr)
         drafts = []
 
+    try:
+        candidates = read_content_candidates(date_str, pending)
+    except Exception as e:
+        print(f"WARNING: content-candidates read failed: {e}", file=sys.stderr)
+        candidates = None
+
     urgent_count = sum(1 for o in (outstanding or []) if o.get("urgent"))
+    cc_today = len((candidates or {}).get("today") or [])
     subject = f"[PKI Compliance] {date_str} — {proposed} proposed change(s)"
     if outstanding is not None:
         subject += f", {len(outstanding)} outstanding"
     if drafts:
         subject += f", {len(drafts)} content draft(s)"
+    if cc_today and SURFACE_CONTENT_CANDIDATES:
+        subject += f", {cc_today} content candidate(s)"
     if urgent_count:
         subject = f"🚨 URGENT ({urgent_count}) — " + subject
 
-    html = render_html(date_str, pending, doc_check, auto_refresh, approval, outstanding, drafts)
-    text = render_text(date_str, pending, doc_check, auto_refresh, approval, outstanding, drafts)
+    html = render_html(date_str, pending, doc_check, auto_refresh, approval, outstanding, drafts, candidates)
+    text = render_text(date_str, pending, doc_check, auto_refresh, approval, outstanding, drafts, candidates)
 
     try:
         r = httpx.post(

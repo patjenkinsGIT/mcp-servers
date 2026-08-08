@@ -241,8 +241,38 @@ Return a JSON object with this structure:
   "document_version_updates": [...],
   "regulatory_updates": [...],
   "needs_human_review": [...],
+  "content_candidates": [...],
   "summary": "brief description of changes found"
 }
+
+CONTENT CANDIDATES (a distinct state — not review, not a deadline):
+An item that is real, relevant, and well-sourced but has NO future date certain \
+belongs in "content_candidates", NOT in needs_human_review or regulatory_updates. \
+It will be routed to the content desk instead of the human review queue. Classify \
+an item as a content candidate when it matches any of:
+- EU ordinary legislative procedure items before adoption (proposals, readings, \
+trilogues, Council positions)
+- Bills before Royal Assent (or equivalent pre-enactment stages)
+- Enforcement actions (CJEU referrals, infringement proceedings)
+- Draft standards with open comment periods (NIST ipd/IWD and similar)
+- Anything else with no date certain that is still newsworthy for PKI operators
+
+Each content_candidate item:
+{
+  "id": "kebab-case-id",
+  "title": "Short Title",
+  "description": "What happened and why it matters, including any dates the \
+source states (the content system does not preserve date fields — dates must \
+appear in this text)",
+  "content_rule": "eu-legislative-procedure|pre-royal-assent-bill|enforcement-action|draft-standard-comment-period|no-date-certain",
+  "provenance_urls": [... same rules as needs_human_review ...],
+  "primary_url": "the one URL from provenance_urls treated as primary, if any"
+}
+
+Do NOT put an item in content_candidates if it has a confirmed future effective \
+date — that is a new_deadline (or needs_human_review if unverified). When the \
+same story later acquires a date certain, emit it as a new_deadline as normal; \
+its earlier content-candidate classification must not stop you.
 
 Each new_deadline should match this format:
 {
@@ -276,6 +306,9 @@ invent, guess, or reconstruct a URL that does not appear in the appendix.
 - This is separate from "source_url" on new_deadlines, which must stay the primary \
 authoritative source. new_deadlines may also carry "provenance_urls" when the primary \
 source was reached via some other page.
+- Items carrying provenance_urls SHOULD also carry "primary_url": the single URL \
+from that list you treated as the primary source for the item. It must be one of \
+the provenance_urls entries. Omit it if no URL deserves the label; NEVER invent one.
 
 Each document_version_update:
 {
@@ -285,7 +318,7 @@ Each document_version_update:
 }
 
 If no changes are found, return:
-{"new_deadlines":[],"updated_deadlines":[],"document_version_updates":[],"regulatory_updates":[],"needs_human_review":[],"summary":"No changes found"}
+{"new_deadlines":[],"updated_deadlines":[],"document_version_updates":[],"regulatory_updates":[],"needs_human_review":[],"content_candidates":[],"summary":"No changes found"}
 """
 
 
@@ -734,6 +767,136 @@ def _review_sig(item) -> str:
     return "text:" + " ".join(_norm(_anchor_text(item)).split()[:12])
 
 
+# ---------------------------------------------------------------------------
+# Content candidates (Part A, 2026-08-07)
+#
+# A fifth outcome next to applied/rejected/held/nothing: real, relevant,
+# well-sourced, but no future date certain — so it becomes content, not a
+# tracked deadline, and never enters the human review queue. The Compliance
+# Tracking Scope Standard (2026-07-22) enforced in code.
+#
+# EMISSION SCOPING — the load-bearing rule: the content-candidate ledger
+# (content_candidate_sink.py) suppresses CONTENT EMISSION ONLY. Nothing on the
+# deadline path (dedup_changes, auto_approve.classify) ever reads it, so an
+# item that later acquires a date certain re-qualifies as a deadline on its
+# next pass regardless of content-candidate history. The two checks live in:
+#   - content emission: content_candidate_sink.process() (ledger consult)
+#   - deadline path:    dedup_changes() / auto_approve.classify() (unchanged)
+# ---------------------------------------------------------------------------
+
+# Code-side backstop for the model-layer classification in DIFF_SYSTEM_PROMPT.
+# Rules 1-4 are pattern-matchable; rule 5 ("no date certain") is deliberately
+# model-only — code cannot tell "undated because legislative-stage" from
+# "undated because it's an operational flag", and a wrong guess here silently
+# eats a real Tier 1 item.
+CONTENT_CANDIDATE_RULES = [
+    # Order matters: "second reading" is stage language in BOTH Westminster
+    # and the EU procedure, so the more specific bill rule (which requires
+    # "Bill" near the stage words) must run before the EU rule.
+    ("pre-royal-assent-bill", re.compile(
+        # "received/granted Royal Assent" is an ADOPTED law, not a bill — only
+        # pre-assent stage language may match.
+        r"(awaiting|before|pending|prior to) royal assent"
+        r"|\bbill\b[^.]{0,120}\b(second reading|third reading|committee stage"
+        r"|report stage|introduced in (parliament|the house)"
+        r"|house of (commons|lords))", re.IGNORECASE)),
+    ("eu-legislative-procedure", re.compile(
+        r"ordinary legislative procedure|trilogue|council position"
+        r"|(first|second) reading|provisional (political )?agreement"
+        r"|proposal for a (regulation|directive)|draft (eu )?(regulation|directive)"
+        r"|com\(\d{4}\)\s*\d+", re.IGNORECASE)),
+    ("enforcement-action", re.compile(
+        r"cjeu referral|referr(ed|al|ing)[^.]{0,60}court of justice"
+        r"|infringement proceeding|reasoned opinion|letter of formal notice",
+        re.IGNORECASE)),
+    ("draft-standard-comment-period", re.compile(
+        r"initial public draft|\bipd\b|\biwd\b|internal working draft"
+        r"|(public )?comment period (open|opens|closes|closing|ends)"
+        r"|draft for (public )?comment|request for (public )?comments? on the draft",
+        re.IGNORECASE)),
+]
+
+# Fixed vocabulary the model may use for content_rule (rules above + model-only
+# rule 5). Anything else is normalized to "no-date-certain" so logs stay greppable.
+CONTENT_RULE_NAMES = {name for name, _ in CONTENT_CANDIDATE_RULES} | {"no-date-certain"}
+
+_DIFF_FAILURE_MARKER_PREFIX = "Diff response unparseable"
+
+
+def _content_rule_match(item) -> tuple[str, str] | None:
+    """(rule_name, matched_text) for the first backstop rule an item trips,
+    or None. Exclusions come first — a wrong reclassification is a silent
+    Tier 1 loss, so anything pipeline-operational or date-bearing stays put:
+      - ballot/tracked-document anchors: operational review flags (holds!)
+      - a parseable date field: has a date certain, deadline path owns it
+      - diff-failure markers: fault reports, never content
+    """
+    if not isinstance(item, dict):
+        return None
+    text = _anchor_text(item)
+    # substring, not startswith: _anchor_text joins id/title/... with spaces,
+    # so a marker stored as description arrives with leading whitespace.
+    if _DIFF_FAILURE_MARKER_PREFIX in text:
+        return None
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(item.get("date") or "")):
+        return None
+    if any(re.match(r"^(sc|csc|smc|cscwg)\d+$", a) for a in _review_anchors(item)):
+        return None
+    if document_anchors(item):
+        return None
+    for name, pat in CONTENT_CANDIDATE_RULES:
+        m = pat.search(text)
+        if m:
+            return name, m.group(0)
+    return None
+
+
+def classify_content_candidates(changes: dict) -> tuple[dict, list]:
+    """Move rule-matching items out of the review-bound lists into
+    content_candidates. Runs after sanitize and BEFORE dedup, so a previously
+    rejected topic (rejected as a deadline, e.g. the CJEU referral) still gets
+    its one shot at becoming content instead of being dropped silently.
+
+    Returns (changes, moved) where moved is [(source_key, id, rule, matched)].
+    Every decision is logged with the specific rule and the text that fired —
+    a misclassification here is a silent failure by nature, so the log is the
+    safety net.
+    """
+    moved: list[tuple] = []
+    candidates = changes.get("content_candidates")
+    if not isinstance(candidates, list):
+        candidates = []
+    changes["content_candidates"] = candidates
+
+    # Normalize model-emitted candidates' rule names so logs stay greppable.
+    for it in candidates:
+        if isinstance(it, dict):
+            if it.get("content_rule") not in CONTENT_RULE_NAMES:
+                it["content_rule"] = "no-date-certain"
+            it.setdefault("content_rule_matched", "(model-classified)")
+
+    for key in ("needs_human_review", "regulatory_updates"):
+        items = changes.get(key)
+        if not isinstance(items, list):
+            continue
+        kept = []
+        for it in items:
+            hit = _content_rule_match(it)
+            if hit is None:
+                kept.append(it)
+                continue
+            rule, matched = hit
+            it["content_rule"] = rule
+            it["content_rule_matched"] = matched
+            candidates.append(it)
+            iid = it.get("id") or (it.get("title") or it.get("description") or "")[:60]
+            moved.append((key, iid, rule, matched))
+            log(f"CONTENT CANDIDATE [{rule}] from {key}: {iid!r} — matched {matched!r}")
+        changes[key] = kept
+
+    return changes, moved
+
+
 def load_manual_holds() -> set:
     """Anchors from HOLDS_FILE whose hold-until date hasn't passed.
 
@@ -832,12 +995,12 @@ def _normalize_provenance(item: dict) -> dict:
     """
     raw = item.get("provenance_urls")
     if raw is None:
-        return item
+        return _normalize_primary_url(item)
     if isinstance(raw, str):
         raw = [raw]
     if not isinstance(raw, list):
         item["provenance_urls"] = []
-        return item
+        return _normalize_primary_url(item)
     seen, urls = set(), []
     for u in raw:
         u = str(u or "").strip()
@@ -845,6 +1008,29 @@ def _normalize_provenance(item: dict) -> dict:
             seen.add(u)
             urls.append(u)
     item["provenance_urls"] = urls[:3]
+    return _normalize_primary_url(item)
+
+
+def _normalize_primary_url(item: dict) -> dict:
+    """Part B: "list of URLs plus which one was treated as primary".
+
+    primary_url must be a real http(s) URL. If it names a URL that survived
+    into provenance_urls, keep it; if it's a valid URL the list is missing
+    (e.g. the cap cut it), prepend it so the pair stays consistent; anything
+    else is dropped — a hallucinated primary is worse than none. Absent field
+    stays absent: old records never grow keys they didn't have.
+    """
+    raw = item.get("primary_url")
+    if raw is None:
+        return item
+    u = str(raw or "").strip()
+    if not u.startswith(("http://", "https://")):
+        item.pop("primary_url", None)
+        return item
+    urls = item.get("provenance_urls")
+    if isinstance(urls, list) and u not in urls:
+        item["provenance_urls"] = ([u] + urls)[:3]
+    item["primary_url"] = u
     return item
 
 
@@ -877,19 +1063,20 @@ def sanitize_changes(changes: dict) -> tuple[dict, list]:
                 dropped.append((key, _label(it), f"malformed (missing {'/'.join(required)})"))
         changes[key] = kept
 
-    review = changes.get("needs_human_review")
-    if not isinstance(review, list):
-        changes["needs_human_review"] = []
-    else:
+    for key in ("needs_human_review", "content_candidates"):
+        items = changes.get(key)
+        if not isinstance(items, list):
+            changes[key] = []
+            continue
         kept = []
-        for it in review:
+        for it in items:
             if isinstance(it, str) and it.strip():
                 kept.append({"id": None, "description": it.strip()})
             elif isinstance(it, dict) and (it.get("description") or it.get("reason") or it.get("item")):
                 kept.append(_normalize_provenance(it))
             else:
-                dropped.append(("needs_human_review", _label(it), "malformed (empty)"))
-        changes["needs_human_review"] = kept
+                dropped.append((key, _label(it), "malformed (empty)"))
+        changes[key] = kept
 
     return changes, dropped
 
@@ -934,8 +1121,15 @@ def reject_ids(ids: list[str], days: int = 30) -> int:
     if REJECTED_FILE.exists():
         raw = json.loads(REJECTED_FILE.read_text())
     idset, sigset = set(raw.get("ids", [])), set(raw.get("signatures", []))
+    # Provenance retention on the rejection path (Part B, 2026-08-07): pending
+    # files age out at 14 days, so without this snapshot a rejected item's URLs
+    # evaporate and every NEEDS-SOURCE follow-up restarts from a blank search
+    # (the NIS2 week-of-open-time failure). Old rejected.json files simply lack
+    # the key — .get keeps them loading; nothing is backfilled.
+    provmap_stored: dict = raw.get("provenance", {}) if isinstance(raw.get("provenance"), dict) else {}
 
     sigmap: dict[str, str] = {}
+    provmap: dict[str, dict] = {}
     cutoff = datetime.now(timezone.utc).date() - timedelta(days=days)
     for f in sorted(DATA_DIR.glob("pending_updates_*.json")):  # oldest→newest: newest wording wins
         ds = f.stem.replace("pending_updates_", "")
@@ -948,13 +1142,29 @@ def reject_ids(ids: list[str], days: int = 30) -> int:
             data = json.loads(f.read_text())
         except Exception:
             continue
+
+        def _snapshot(it: dict) -> None:
+            urls = [u for u in (it.get("provenance_urls") or []) if isinstance(u, str)]
+            primary = it.get("primary_url") or it.get("source_url")
+            if urls or primary:
+                provmap[it["id"]] = {
+                    "title": it.get("title") or it.get("topic") or "",
+                    "provenance_urls": urls[:3],
+                    "primary_url": primary if isinstance(primary, str) else None,
+                    "seen_in": ds,
+                }
+
         for key in ("new_deadlines", "updated_deadlines", "regulatory_updates"):
             for it in data.get(key, []):
                 if isinstance(it, dict) and it.get("id"):
                     sigmap[it["id"]] = _sig(it)
-        for it in data.get("needs_human_review", []):
-            if isinstance(it, dict) and it.get("id"):
-                sigmap[it["id"]] = _review_sig(it)
+                    _snapshot(it)
+        for key, sigfn in (("needs_human_review", _review_sig),
+                           ("content_candidates", _review_sig)):
+            for it in data.get(key, []):
+                if isinstance(it, dict) and it.get("id"):
+                    sigmap[it["id"]] = sigfn(it)
+                    _snapshot(it)
 
     for iid in ids:
         idset.add(iid)
@@ -964,10 +1174,16 @@ def reject_ids(ids: list[str], days: int = 30) -> int:
             log(f"WARNING: no signature found for {iid!r} in the last {days}d of "
                 f"pending files — id-only rejection will not suppress re-worded "
                 f"re-proposals of the same topic")
+        if iid in provmap:
+            snap = dict(provmap[iid])
+            snap["signature"] = sigmap.get(iid)
+            snap["rejected_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            provmap_stored[iid] = snap
 
-    REJECTED_FILE.write_text(
-        json.dumps({"ids": sorted(idset), "signatures": sorted(sigset)}, indent=2)
-    )
+    out = {"ids": sorted(idset), "signatures": sorted(sigset)}
+    if provmap_stored:
+        out["provenance"] = provmap_stored
+    REJECTED_FILE.write_text(json.dumps(out, indent=2))
     return len(idset)
 
 
@@ -1129,9 +1345,19 @@ def main():
         for kind, iid, why in malformed:
             log(f"  - [{kind}] {iid}: {why}")
 
+    # Step 3a2: Content-candidate reclassification (Part A). BEFORE dedup on
+    # purpose: dedup drops previously-rejected review flags, and a topic
+    # rejected as a deadline (e.g. a CJEU referral) is exactly the population
+    # that should get its one shot at becoming content instead.
+    changes, cc_moved = classify_content_candidates(changes)
+    if cc_moved:
+        log(f"Content-candidate backstop moved {len(cc_moved)} item(s) out of the review path")
+
     # Step 3b: Dedup against live DEADLINES + previously rejected items + the
     # last 14 days of review flags, so the morning email never re-proposes
     # things already handled or re-nags about the same pending ballots.
+    # content_candidates are deliberately NOT deduped here — emission dedup is
+    # the sink ledger's job, and it must never leak onto the deadline path.
     changes, removed = dedup_changes(changes, current_data, exclude_date=today)
     if removed:
         log(f"Dedup removed {len(removed)} already-known/rejected item(s):")
@@ -1144,6 +1370,7 @@ def main():
     doc_count = len(changes.get("document_version_updates", []))
     reg_count = len(changes.get("regulatory_updates", []))
     review_count = len(changes.get("needs_human_review", []))
+    candidate_count = len(changes.get("content_candidates", []))
     total_changes = new_count + updated_count + doc_count + reg_count
 
     summary_lines = [
@@ -1163,6 +1390,11 @@ def main():
         summary_lines.append(f"  - REGULATORY: {d.get('description', 'unknown')}")
     if review_count:
         summary_lines.append(f"  - NEEDS REVIEW: {review_count} item(s)")
+    if candidate_count:
+        for c in changes.get("content_candidates", []):
+            label = c.get("title") or c.get("id") or (c.get("description") or "")[:60]
+            summary_lines.append(
+                f"  - CONTENT CANDIDATE [{c.get('content_rule', '?')}]: {label}")
     if removed:
         summary_lines.append(f"  - DEDUP: filtered {len(removed)} already-known/rejected item(s)")
 
@@ -1187,6 +1419,17 @@ def main():
     # --dry-run never reaches here, so a dry run does not consume the clock.
     if research_ok:
         mark_research_ran()
+
+    # Content-candidate emission (Part A sink). Best-effort by contract: a news
+    # API hiccup or missing env must never fail the morning run — failed rows
+    # stay `pending` in the ledger and retry on the next pass, and the daily
+    # email surfaces them either way.
+    try:
+        import content_candidate_sink
+        content_candidate_sink.process(changes, today)
+    except Exception as e:
+        log(f"WARNING: content-candidate sink failed ({e}) — candidates remain "
+            f"in the review file and ledger; nothing lost, will retry next run")
 
     if not args.auto_apply:
         summary_lines.append(f"Mode: review")

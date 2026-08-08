@@ -3868,6 +3868,25 @@ class FetchDocumentInput(BaseModel):
         description="Document ID to fetch"
     )
 
+class ListContentCandidatesInput(BaseModel):
+    """Input for listing content candidates."""
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    sink_status: Optional[str] = Field(
+        default=None,
+        description="Filter by sink status: 'pending' (awaiting news-desk delivery) or 'posted'"
+    )
+    limit: int = Field(
+        default=50,
+        ge=1,
+        le=500,
+        description="Max candidates to return (newest first)"
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Output format"
+    )
+
 # ============================================================================
 # Helper Functions
 # ============================================================================
@@ -4893,6 +4912,106 @@ async def get_status(params: GetStatusInput) -> str:
 
     return "\n".join(lines)
 
+# --- Content candidates (Part A, 2026-08-07) --------------------------------
+# The research pipeline's fifth outcome: real, well-sourced, no date certain —
+# routed to content instead of the review queue. The ledger lives in the HOST
+# cron's data dir (~/.pki-compliance-mcp/content_candidates.json), which the
+# Docker MCP cannot see (its DATA_DIR is the /data volume), so this tool falls
+# back to the systemd API's route — same pattern as the pki_get_status peer
+# check.
+
+CONTENT_CANDIDATES_FILE = DATA_DIR / "content_candidates.json"
+PEER_API_CANDIDATES_URL = "https://compliance-api.fixmycert.com/api/content-candidates"
+
+
+def _load_content_candidates_local() -> Optional[dict]:
+    """The ledger from this process's DATA_DIR, or None if absent/unreadable."""
+    try:
+        data = json.loads(CONTENT_CANDIDATES_FILE.read_text())
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+@mcp_tool(
+    name="pki_list_content_candidates",
+    annotations={
+        "title": "List Content Candidates",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    }
+)
+async def list_content_candidates(params: ListContentCandidatesInput) -> str:
+    """List content candidates — pipeline items that are real and well-sourced
+    but have no date certain, so they became content leads instead of tracked
+    deadlines. Never part of the review queue.
+
+    sink_status "posted" means a draft exists in the news desk; "pending" means
+    delivery hasn't succeeded yet (it retries on each research run).
+
+    Args:
+        params: ListContentCandidatesInput with sink_status filter, limit,
+                response_format
+
+    Returns:
+        Candidates newest-first with rule, sink status, and source URLs
+    """
+    ledger = _load_content_candidates_local()
+    source = str(CONTENT_CANDIDATES_FILE)
+    if ledger is None:
+        # Container case: no host ledger in /data. Ask the systemd API, which
+        # reads the cron's data dir directly.
+        try:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                r = await client.get(PEER_API_CANDIDATES_URL, headers={"Cache-Control": "no-cache"})
+                r.raise_for_status()
+                ledger = r.json().get("candidates", {})
+                source = PEER_API_CANDIDATES_URL
+        except Exception as e:
+            return (f"❌ No local ledger at {CONTENT_CANDIDATES_FILE} and the API "
+                    f"fallback failed ({type(e).__name__}: {e}). If no candidate has "
+                    f"ever been classified, the ledger simply doesn't exist yet.")
+    if not isinstance(ledger, dict):
+        ledger = {}
+
+    rows = []
+    for sig, row in ledger.items():
+        if not isinstance(row, dict):
+            continue
+        if params.sink_status and row.get("sink_status") != params.sink_status:
+            continue
+        rows.append({**row, "signature": sig})
+    rows.sort(key=lambda r: (r.get("recorded_at") or r.get("first_seen") or ""), reverse=True)
+    total = len(rows)
+    rows = rows[:params.limit]
+
+    if params.response_format == ResponseFormat.JSON:
+        return json.dumps({"candidates": rows, "total": total,
+                           "shown": len(rows), "source": source}, indent=2)
+
+    if not rows:
+        flt = f" with sink_status={params.sink_status}" if params.sink_status else ""
+        return f"No content candidates{flt}. (Ledger: {source})"
+    lines = [f"# Content candidates ({len(rows)} of {total})",
+             f"_Ledger: {source}_", ""]
+    for r in rows:
+        status = r.get("sink_status", "?")
+        icon = {"posted": "✅", "pending": "⏳"}.get(status, "•")
+        lines.append(f"- {icon} **{r.get('title', r['signature'])}** — rule `{r.get('rule', '?')}`, "
+                     f"{status}, first seen {r.get('first_seen', '?')}")
+        if r.get("news_id"):
+            lines.append(f"  - news draft id: `{r['news_id']}`")
+        primary = r.get("primary_url")
+        if primary:
+            lines.append(f"  - primary source: {primary}")
+        for u in (r.get("provenance_urls") or []):
+            if u != primary:
+                lines.append(f"  - source: {u}")
+    return "\n".join(lines)
+
+
 @mcp_tool(
     name="pki_list_sources",
     annotations={
@@ -5097,7 +5216,8 @@ def create_http_app():
                         "/api/compliance/deadlines", "/api/compliance/upcoming",
                         "/api/compliance/frameworks", "/api/compliance/frameworks/{id}",
                         "/api/compliance/deadlines.csv",
-                        "/api/compliance-data", "/api/news", "/api/news/sources", "/api/news/refresh"
+                        "/api/compliance-data", "/api/news", "/api/news/sources", "/api/news/refresh",
+                        "/api/content-candidates"
                     ]
                 }).encode())
                 return
@@ -5294,6 +5414,27 @@ li.review::before{{background:#fbbf24}}
                     "newItemsAdded": result.get("newItemsAdded", 0),
                     "totalItems": len(result.get("items", [])),
                     "updatedAt": result.get("lastFetched")
+                }, indent=2).encode())
+                return
+
+            # Content-candidate ledger (Part A, 2026-08-07). Served by the
+            # systemd API, whose DATA_DIR is the host cron's data dir — the
+            # Docker MCP's pki_list_content_candidates falls back to this
+            # route because its /data volume never contains the ledger.
+            # Read-only, no cache: sink_status changes on every research run.
+            if path == "/api/content-candidates":
+                ledger = _load_content_candidates_local() or {}
+                pending_count = sum(1 for r in ledger.values()
+                                    if isinstance(r, dict) and r.get("sink_status") == "pending")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "candidates": ledger,
+                    "total": len(ledger),
+                    "pending_delivery": pending_count,
                 }, indent=2).encode())
                 return
 
