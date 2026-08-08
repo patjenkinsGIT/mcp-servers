@@ -287,6 +287,33 @@ def doc_check_summary(log_lines: list[str], date_str: str) -> dict:
     }
 
 
+def diff_parse_failure(pending: dict | None) -> str | None:
+    """Detail string when today's review file records a diff parse failure,
+    else None.
+
+    A failed parse degrades into a review file whose needs_human_review holds
+    a marker leading "Diff response unparseable ..." (and whose summary starts
+    "Could not parse diff response" — the only signal in pre-2026-08-06 files,
+    e.g. 2026-08-02's, where the marker was empty and sanitized away). Such a
+    run extracts ZERO proposals, so it must never render as clean (2026-08-08
+    decision); until this check, it did — the degrade path writes a review
+    file and logs no ERROR, which is exactly the "ran clean, review file
+    written" signature. Detection reads the review file rather than cron.log
+    so the signal survives log rotation and catches failed manual runs too.
+    """
+    if not pending or "_parse_error" in pending:
+        return None
+    import compliance_auto_refresh as car
+    for it in pending.get("needs_human_review") or []:
+        txt = (it.get("description") or "") if isinstance(it, dict) else str(it)
+        if txt.startswith(car._DIFF_FAILURE_MARKER_PREFIX):
+            return txt
+    summary = str(pending.get("summary") or "")
+    if summary.startswith("Could not parse diff response"):
+        return summary
+    return None
+
+
 def auto_refresh_summary(log_lines: list[str]) -> dict:
     """Parse the most recent compliance_auto_refresh.py run from cron.log."""
     starts = [i for i, ln in enumerate(log_lines) if "Auto-Refresh starting" in ln]
@@ -432,8 +459,20 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
     # Status block
     parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>Cron status</h3>")
     parts.append("<ul style='font:13px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding-left:20px'>")
+    diff_fail = diff_parse_failure(pending)
     if auto_refresh.get("ran"):
-        if auto_refresh.get("skipped") and not auto_refresh.get("errors"):
+        # Checked before every other outcome: a run whose diff response could
+        # not be parsed extracted zero proposals and must report as a FAILURE,
+        # whatever else the logs say (2026-08-08 decision).
+        if diff_fail:
+            parts.append("<li>10:00 UTC research cron: <strong style='color:#b91c1c'>✗ FAILED — diff response unparseable, no proposals extracted from this run's research</strong>")
+            if auto_refresh.get("skipped"):
+                # The scheduled run skipped, so the failed parse came from
+                # another run today (e.g. a manual --force). Both facts shown.
+                reason = auto_refresh.get("skip_reason") or "no tracked changes"
+                parts.append(f" (scheduled run skipped: {escape(reason)}; the failed parse is from another run today)")
+            parts.append(f"<br><span style='color:#64748b;font-size:12px'>{escape(diff_fail[:300])}</span>")
+        elif auto_refresh.get("skipped") and not auto_refresh.get("errors"):
             reason = auto_refresh.get("skip_reason") or "no tracked changes"
             parts.append(f"<li>10:00 UTC research cron: ✓ ran — research skipped ({escape(reason)}); no review file expected")
         elif auto_refresh.get("in_progress"):
@@ -648,7 +687,13 @@ def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refre
             for u in (o.get("provenance_urls") or []):
                 lines.append(f"      source: {u}")
     lines.append("")
-    lines.append(f"10:00 UTC research cron: {'ran' if auto_refresh.get('ran') else 'DID NOT RUN'}")
+    diff_fail = diff_parse_failure(pending)
+    if diff_fail:
+        lines.append("10:00 UTC research cron: FAILED — diff response unparseable, "
+                     "no proposals extracted from this run's research")
+        lines.append(f"  {diff_fail[:200]}")
+    else:
+        lines.append(f"10:00 UTC research cron: {'ran' if auto_refresh.get('ran') else 'DID NOT RUN'}")
     lines.append(f"10:30 UTC doc-check cron: {'ran' if doc_check.get('ran') else 'DID NOT RUN'}")
     lines.append("")
     lines.append(f"Dashboard: {DASHBOARD_URL}")

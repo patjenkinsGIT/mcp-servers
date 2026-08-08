@@ -404,6 +404,17 @@ def analyze_diff(research_results: dict, current_data: dict | None) -> dict:
             block["text"] for block in data["content"] if block["type"] == "text"
         )
 
+    # Envelope metadata, logged on EVERY diff call. The 2026-08-02/06/08
+    # failures were all premature terminations of the completion returned in a
+    # complete, valid envelope (0 / ~7K / 449 chars — far under max_tokens),
+    # and the one field that would have named the cause, stop_reason, was
+    # discarded right here. Costs nothing to keep; the next failure names
+    # itself instead of needing a forensic session.
+    stop_reason = data.get("stop_reason")
+    out_tokens = (data.get("usage") or {}).get("output_tokens")
+    envelope = f"stop_reason={stop_reason}, output_tokens={out_tokens}"
+    log(f"Diff response: {len(text)} chars, {envelope}")
+
     # Extract JSON from response.
     #
     # The brace-less response is the RARE failure; a response that contains
@@ -421,18 +432,26 @@ def analyze_diff(research_results: dict, current_data: dict | None) -> dict:
     # diagnostic artifact. 2026-08-02 showed why disk matters — that day's
     # response was empty, the sanitizer dropped it as "malformed (empty)", and
     # the failure left no trace anywhere.
+    # Both failure branches log an explicit ERROR line (2026-08-08 decision:
+    # loud failure). daily_email's status parser counts "ERROR" lines, so this
+    # alone flips the email off the clean path even before its own
+    # review-file-based detection — two independent signals, either suffices.
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
     json_match = re.search(r"\{[\s\S]*\}", text)
     if json_match:
         try:
             return json.loads(json_match.group())
         except json.JSONDecodeError as e:
-            saved = _save_raw_diff(text, f"JSONDecodeError: {e}", stamp)
+            log(f"ERROR: diff parse failed — no proposals extracted this run "
+                f"(JSONDecodeError: {e}; {envelope})")
+            saved = _save_raw_diff(text, f"JSONDecodeError: {e}; {envelope}", stamp)
             return {
                 "summary": f"Could not parse diff response — malformed JSON ({e})",
                 "needs_human_review": [_diff_failure_marker(text, saved, stamp)],
             }
-    saved = _save_raw_diff(text, "no JSON object found in response", stamp)
+    log(f"ERROR: diff parse failed — no proposals extracted this run "
+        f"(no JSON object found; {envelope})")
+    saved = _save_raw_diff(text, f"no JSON object found in response; {envelope}", stamp)
     return {
         "summary": "Could not parse diff response — no JSON object found",
         "needs_human_review": [_diff_failure_marker(text, saved, stamp)],
