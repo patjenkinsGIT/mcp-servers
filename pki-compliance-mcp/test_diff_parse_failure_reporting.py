@@ -152,6 +152,7 @@ class _FakeResp:
 
 class _FakeClient:
     payload = ""
+    last_request_json = None
 
     def __init__(self, *a, **k):
         pass
@@ -163,6 +164,7 @@ class _FakeClient:
         return False
 
     def post(self, *a, **k):
+        _FakeClient.last_request_json = k.get("json")
         return _FakeResp(_FakeClient.payload)
 
 
@@ -205,6 +207,17 @@ try:
           (d / "auto_refresh.log").read_text().count("ERROR: diff parse failed") == 2)
     check("envelope metadata logged on clean calls too",
           (d / "auto_refresh.log").read_text().count("stop_reason=max_tokens") >= 3)
+
+    # The 2026-08-12 fix (Option C, Pat's decision): adaptive thinking on
+    # claude-sonnet-5 counts against max_tokens and exhausted the old 16000
+    # cap on every scheduled diff call since 08-02. Lock the request shape so
+    # a revert reintroducing the failure class cannot land silently.
+    req = _FakeClient.last_request_json
+    check("diff request raises max_tokens to 32000", req["max_tokens"] == 32000)
+    check("diff request caps thinking spend at effort low",
+          req.get("output_config") == {"effort": "low"})
+    check("diff request leaves adaptive thinking enabled (no thinking param)",
+          "thinking" not in req)
 finally:
     car.httpx.Client = _real_client
 

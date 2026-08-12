@@ -393,7 +393,17 @@ def analyze_diff(research_results: dict, current_data: dict | None) -> dict:
             },
             json={
                 "model": MODEL,
-                "max_tokens": 16000,
+                # claude-sonnet-5 runs adaptive thinking by default when the
+                # thinking param is omitted, and thinking tokens count against
+                # max_tokens — that exhausted the old 16000 cap on all four
+                # 2026-08 diff-parse failures (stop_reason=max_tokens,
+                # output_tokens=16000, ~13K of it invisible thinking). Low
+                # effort caps the thinking spend; 32000 absorbs the variance
+                # that remains while staying under the 600s read timeout at
+                # observed throughput. Both are part of the cached prompt
+                # prefix — set once, do not vary per run.
+                "max_tokens": 32000,
+                "output_config": {"effort": "low"},
                 "system": DIFF_SYSTEM_PROMPT,
                 "messages": [{"role": "user", "content": prompt}],
             },
@@ -404,12 +414,13 @@ def analyze_diff(research_results: dict, current_data: dict | None) -> dict:
             block["text"] for block in data["content"] if block["type"] == "text"
         )
 
-    # Envelope metadata, logged on EVERY diff call. The 2026-08-02/06/08
-    # failures were all premature terminations of the completion returned in a
-    # complete, valid envelope (0 / ~7K / 449 chars — far under max_tokens),
-    # and the one field that would have named the cause, stop_reason, was
-    # discarded right here. Costs nothing to keep; the next failure names
-    # itself instead of needing a forensic session.
+    # Envelope metadata, logged on EVERY diff call. The 2026-08-02/06/08/12
+    # failures were all truncations at max_tokens — the visible text looked
+    # far under the cap, but adaptive thinking had consumed the rest of the
+    # budget invisibly. stop_reason was discarded right here until 2026-08-12,
+    # which is why the cause took four failures to name. Costs nothing to
+    # keep; any future failure names itself instead of needing a forensic
+    # session.
     stop_reason = data.get("stop_reason")
     out_tokens = (data.get("usage") or {}).get("output_tokens")
     envelope = f"stop_reason={stop_reason}, output_tokens={out_tokens}"
