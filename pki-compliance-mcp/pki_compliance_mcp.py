@@ -87,6 +87,17 @@ FEEDS = {
         "type": "atom",
         "priority": "high",
     },
+    "apple_root_program": {
+        # Same shape as the Microsoft entry: the repo is Apple's authoritative
+        # publication point (its README says so; repo created 2026-02-19), and
+        # the DOCUMENTS hash-watch on raw policy.md can only say "the hash
+        # moved". commits.atom attributes each move to a dated commit and
+        # surfaces changes before they land in policy.md.
+        "name": "Apple Root Program (GitHub commits)",
+        "url": "https://github.com/apple/apple-root-program/commits.atom",
+        "type": "atom",
+        "priority": "high",
+    },
 }
 
 DOCUMENTS = {
@@ -3929,29 +3940,59 @@ _HASH_NOISE_BLOCKS = [
 ]
 
 
-def _strip_balanced_blocks(content: str, tag: str, start_pat: "re.Pattern") -> str:
-    """Remove every region from a start_pat match through its balanced </tag>.
+# csrc.nist.gov publication pages (nist_800_57, nist_800_131a) are the only
+# tracked documents that hash a rendered HTML page whole — every other page
+# source was repointed to a raw artifact or scoped by check_url. Their site
+# chrome (nav, footer, banners) can be redeployed with no publication event,
+# which is what moved nist_800_57 on 2026-08-07 and nist_800_131a on
+# 2026-08-12: both hashes were stable across back-to-back fetches yet had
+# moved with nothing published behind them. When one of these containers is
+# present, only its region is hashed. The publications-detail panel carries
+# everything that constitutes a publication event — Date Published, Planning
+# Note, Document History, Supersedes — so the revision/withdrawal signal that
+# argued against repointing to the PDF artifact is preserved.
+_HASH_CONTENT_REGIONS = [
+    ("div", re.compile(
+        r'<div\b[^>]*\bclass="[^"]*\bpublications-detail\b[^"]*"[^>]*>',
+        re.IGNORECASE)),
+]
 
-    If the markup is unbalanced (no matching close tag), only the opening tag
-    is dropped so the scan always terminates.
+
+def _balanced_end(content: str, tag: str, m: "re.Match") -> int:
+    """End offset of the balanced </tag> for the block opened at match m.
+
+    If the markup is unbalanced (no matching close tag), returns m.end() so
+    callers degrade to the opening tag alone and always terminate.
     """
     tag_pat = re.compile(rf"<(/?){tag}\b[^>]*>", re.IGNORECASE)
+    depth = 1
+    for t in tag_pat.finditer(content, m.end()):
+        depth += -1 if t.group(1) else 1
+        if depth == 0:
+            return t.end()
+    return m.end()
+
+
+def _strip_balanced_blocks(content: str, tag: str, start_pat: "re.Pattern") -> str:
+    """Remove every region from a start_pat match through its balanced </tag>."""
     while True:
         m = start_pat.search(content)
         if not m:
             return content
-        depth, cut_end = 1, m.end()
-        for t in tag_pat.finditer(content, m.end()):
-            depth += -1 if t.group(1) else 1
-            if depth == 0:
-                cut_end = t.end()
-                break
-        content = content[:m.start()] + content[cut_end:]
+        content = content[:m.start()] + content[_balanced_end(content, tag, m):]
 
 
 def hash_content(content: str) -> str:
     """Generate SHA-256 hash of content, ignoring per-request dynamic noise."""
-    # Scripts first: script bodies may contain literal tag text that would
+    # Region scoping first, on the raw page: a chrome change outside the
+    # region must not move the hash, and the noise rules below still apply
+    # inside the extracted region.
+    for tag, start_pat in _HASH_CONTENT_REGIONS:
+        m = start_pat.search(content)
+        if m:
+            content = content[m.start():_balanced_end(content, tag, m)]
+            break
+    # Scripts next: script bodies may contain literal tag text that would
     # otherwise confuse the balanced-block scan.
     for pat in _HASH_NOISE_PATTERNS:
         content = pat.sub("", content)

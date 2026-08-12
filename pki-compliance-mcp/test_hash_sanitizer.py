@@ -91,5 +91,48 @@ scripted = capture_a.replace(
 check("script noise still invisible",
       pki.hash_content(capture_a) == pki.hash_content(scripted))
 
+# 2026-08-12: CSRC page-chrome false positives (nist_800_57 on 08-07,
+# nist_800_131a on 08-12 — hash stable across back-to-back fetches, moved
+# with nothing published). Fix scopes the hash to the publications-detail
+# panel; a real capture of the 800-131A page is the fixture.
+print("CSRC region scoping: chrome outside publications-detail is invisible")
+csrc = (FIXTURES / "csrc_800_131a_capture.html").read_text()
+check("fixture carries the region marker", "publications-detail" in csrc)
+chrome_edit = csrc.replace("main-menu-drop", "main-menu-drop-v2")
+check("nav chrome edit present in raw", chrome_edit != csrc)
+check("nav chrome edit hashes identically",
+      pki.hash_content(csrc) == pki.hash_content(chrome_edit))
+footer_edit = csrc.replace("</body>", "<p>new site banner</p></body>")
+check("footer/banner injection hashes identically",
+      pki.hash_content(csrc) == pki.hash_content(footer_edit))
+
+print("CSRC region scoping: publication events still detected")
+pub_edit = csrc.replace("Date Published", "Date Withdrawn")
+check("status-field edit present in raw", pub_edit != csrc)
+check("status-field edit changes the hash",
+      pki.hash_content(csrc) != pki.hash_content(pub_edit))
+note_edit = csrc.replace("Planning Note", "Planning Note (Updated)")
+check("Planning Note edit changes the hash",
+      pki.hash_content(csrc) != pki.hash_content(note_edit))
+
+print("CSRC region scoping: extraction keeps the signals, drops the chrome")
+region = csrc
+for tag, start_pat in pki._HASH_CONTENT_REGIONS:
+    m = start_pat.search(region)
+    if m:
+        region = region[m.start():pki._balanced_end(region, tag, m)]
+        break
+for probe in ("Date Published", "Planning Note", "Document History"):
+    check(f"region keeps {probe!r}", probe in region)
+check("region drops the nav menu", "main-menu-drop" not in region)
+check("cdn-cgi noise inside the region still stripped from the hash",
+      pki.hash_content(csrc)
+      == pki.hash_content(csrc.replace(
+          "/cdn-cgi/l/email-protection#", "/cdn-cgi/l/email-protection#ff")))
+
+print("pages without the region marker keep full-page hashing")
+check("learn.microsoft fixture unaffected by region rules",
+      not any(sp.search(capture_a) for _, sp in pki._HASH_CONTENT_REGIONS))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 raise SystemExit(1 if FAIL else 0)
