@@ -338,5 +338,80 @@ check("flag off: today section gone, stuck warning stays",
       "Content candidates (new state" not in html_off and "awaiting news-desk delivery" in html_off)
 de.SURFACE_CONTENT_CANDIDATES = flag_was
 
+print("== ledger path resolution (2026-08-15) ==")
+# The API route and pki_list_content_candidates served an empty ledger from
+# 08-08 to 08-15 because they resolved DATA_DIR, which on the systemd unit
+# points at a directory the ledger has never been written to. Resolution is
+# now an explicit ordered path list; DATA_DIR is untouched.
+import os as _os
+
+import pki_compliance_mcp as pki
+
+_pki_file_was, _pki_cron_was = pki.CONTENT_CANDIDATES_FILE, pki.CRON_DATA_DIR
+_env_was = _os.environ.pop("CONTENT_CANDIDATES_FILE", None)
+
+wrong = Path(tempfile.mkdtemp())          # stands in for the unit's DATA_DIR
+cron = Path(tempfile.mkdtemp())           # stands in for ~/.pki-compliance-mcp
+rows = {"text:six rows": {"sink_status": "posted", "news_id": "n1", "title": "Real row"}}
+(cron / "content_candidates.json").write_text(json.dumps(rows))
+
+pki.CONTENT_CANDIDATES_FILE = wrong / "content_candidates.json"
+pki.CRON_DATA_DIR = cron
+ledger, path = pki._read_content_candidates()
+check("systemd shape: DATA_DIR has no ledger, cron dir does -> real rows served",
+      ledger == rows and path == cron / "content_candidates.json")
+
+# A stray empty ledger in DATA_DIR must not shadow the populated one.
+(wrong / "content_candidates.json").write_text(json.dumps({}))
+ledger, path = pki._read_content_candidates()
+check("empty ledger on an earlier path does not shadow a populated later one",
+      ledger == rows and path == cron / "content_candidates.json")
+
+# Earlier path wins when both are populated.
+(wrong / "content_candidates.json").write_text(json.dumps({"text:local": {"sink_status": "pending"}}))
+ledger, path = pki._read_content_candidates()
+check("populated earlier path wins", path == wrong / "content_candidates.json")
+
+# Explicit override beats both.
+override = Path(tempfile.mkdtemp()) / "elsewhere.json"
+override.write_text(json.dumps({"text:override": {"sink_status": "posted"}}))
+_os.environ["CONTENT_CANDIDATES_FILE"] = str(override)
+ledger, path = pki._read_content_candidates()
+check("CONTENT_CANDIDATES_FILE env override wins", path == override)
+check("override is first in the tried-path list",
+      pki._content_candidates_paths()[0] == override)
+del _os.environ["CONTENT_CANDIDATES_FILE"]
+
+# Container shape: nothing readable anywhere -> None, so the tool falls back
+# to the peer API instead of reporting an empty ledger as fact.
+pki.CONTENT_CANDIDATES_FILE = Path(tempfile.mkdtemp()) / "content_candidates.json"
+pki.CRON_DATA_DIR = Path(tempfile.mkdtemp())
+ledger, path = pki._read_content_candidates()
+check("container shape: no ledger on any path -> (None, None)",
+      ledger is None and path is None)
+check("_load_content_candidates_local mirrors the tuple form",
+      pki._load_content_candidates_local() is None)
+
+# Junk on disk is skipped, not raised.
+bad = Path(tempfile.mkdtemp())
+(bad / "content_candidates.json").write_text("not json{")
+pki.CONTENT_CANDIDATES_FILE = bad / "content_candidates.json"
+pki.CRON_DATA_DIR = cron
+ledger, path = pki._read_content_candidates()
+check("unparseable ledger is skipped for the next path",
+      path == cron / "content_candidates.json")
+
+# Host-cron shape: DATA_DIR IS the cron dir, so the list must not repeat it.
+pki.CONTENT_CANDIDATES_FILE = cron / "content_candidates.json"
+pki.CRON_DATA_DIR = cron
+check("host-cron shape: the one path is listed once",
+      pki._content_candidates_paths() == [cron / "content_candidates.json"])
+check("host-cron shape still reads its own ledger",
+      pki._read_content_candidates()[0] == rows)
+
+pki.CONTENT_CANDIDATES_FILE, pki.CRON_DATA_DIR = _pki_file_was, _pki_cron_was
+if _env_was is not None:
+    _os.environ["CONTENT_CANDIDATES_FILE"] = _env_was
+
 print(f"\n{PASS} passed, {FAIL} failed")
 raise SystemExit(1 if FAIL else 0)

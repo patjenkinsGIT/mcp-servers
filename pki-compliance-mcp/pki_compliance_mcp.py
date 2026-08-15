@@ -1319,6 +1319,60 @@ DEADLINES = [
         "jurisdiction": "eu",
         "status": "ongoing",
     },
+    # Apple Root Program Policy v2.0 (applied 2026-08-15). Source of all three:
+    # https://github.com/apple/apple-root-program/blob/main/policy.md — the
+    # document's own Change Log row for v2.0 dates every obligation below, and
+    # the normative sections restate the dates except where noted per entry.
+    # Split three ways because the dates differ, not the mechanisms.
+    {
+        "id": "apple-policy-v2-subca-eku",
+        "date": "2026-08-01",
+        "status": "ongoing",
+        "title": "Apple Policy v2.0: Sub-CA EKU mandatory, Apple approval for Externally Operated Sub-CAs, RSA-4096/ECDSA-384 floor for new roots",
+        "description": "Apple Root Program Policy v2.0 (header: \"Effective 2026-08-01\") starts three obligations on this date. (1) §1.7: a Subordinate CA Certificate signed on or after 2026-08-01 MUST contain an Extended Key Usage extension and MUST NOT assert anyExtendedKeyUsage (2.5.29.37.0). One signed on or after 2026-08-01 and before 2027-07-01 must additionally satisfy either (a) dedication to a single Trust Purpose per Appendix A, or (b) issuance under a multi-purpose root with no Appendix A Trust-Purpose EKU at all and its use case (e.g. Document Signing) covered by a CP/CPS inside the annual audit scope; Apple may require issuance from a (b) Sub-CA to stop at any time. For this section a renewal, re-key or cross-sign produces a NEW Subordinate CA Certificate whose signing date is the date of that issuance. (2) §1.4: CA Owners MUST receive Apple's approval prior to issuing each Subordinate CA Certificate (or cross-signed certificate) to an Externally Operated Subordinate CA. (3) §1.5: Root Inclusion Requests MUST only contain Root CA Certificates with a minimum key size of RSA 4096-bit or ECDSA 384-bit, and are accepted only for hierarchies dedicated to a single Trust Purpose with a single combined CP/CPS in Markdown. Per the §2 note, issuance-related effective dates are enforced from 00:00:00 UTC on the stated date.",
+        "source": "apple",
+        "source_url": "https://github.com/apple/apple-root-program/blob/main/policy.md",
+        "category": "root-store",
+        "isMajor": True,
+        "impact": "Every Sub-CA certificate Apple sees from 2026-08-01 onward — including renewals, re-keys and cross-signs of existing Sub-CAs — must carry an EKU extension and must not assert anyExtendedKeyUsage.",
+        "is_estimated": False,
+        "consequences": {
+            "enforcement": "Apple Root Program Policy v2.0 §1.7 binds every Subordinate CA Certificate signed on or after 2026-08-01: EKU extension present, anyExtendedKeyUsage absent, and single-Trust-Purpose dedication unless the narrow (b) carve-out applies. Non-conformance is a policy violation handled through the program's incident process (§1.2.4, §3), and Apple reserves the right to require a CA Owner to discontinue issuance from a Sub-CA qualifying under (b). The §1.4 approval duty and the §1.5 key-size floor are dated by the v2.0 Change Log; their section text states the requirement without restating the date.",
+            "scenario": "No action unless you operate a CA — but the date is not a one-off, which is why it stays in force rather than reading as completed. It re-applies every time a Sub-CA is renewed, re-keyed or cross-signed, because the policy treats each of those as a newly signed Subordinate CA Certificate with a fresh signing date. A multi-purpose Sub-CA that was compliant when issued in 2025 fails this rule the day it is re-keyed in 2027 unless it has been split by Trust Purpose first. For an enterprise buying from a public CA, the visible effect is downstream: your CA's hierarchy gets split per Trust Purpose, so the issuing CA behind your TLS certificates may change identity at renewal even though nothing about your certificate request did.",
+        },
+    },
+    {
+        "id": "apple-policy-v2-smime-rfc822name",
+        "date": "2027-02-01",
+        "title": "Apple: newly signed S/MIME subscriber certificates must carry an rfc822Name SAN",
+        "description": "Apple Root Program Policy v2.0 §2.3: effective 2027-02-01, all newly signed Subscriber certificates that contain the id-kp-emailProtection EKU MUST include at least one rfc822Name in the subjectAltName extension. Applies to the Secure Email and Legacy S/MIME Trust Purposes. Per the §2 note the requirement is enforced for certificates signed on or after 2027-02-01 at 00:00:00 UTC.",
+        "source": "apple",
+        "source_url": "https://github.com/apple/apple-root-program/blob/main/policy.md",
+        "category": "certificates",
+        "isMajor": True,
+        "impact": "S/MIME certificates signed on or after 2027-02-01 that carry the emailProtection EKU but no rfc822Name SAN are non-conformant with Apple's root program.",
+        "is_estimated": False,
+        "consequences": {
+            "enforcement": "From 2027-02-01 a subscriber certificate containing id-kp-emailProtection must carry at least one rfc822Name in subjectAltName to conform to Apple Root Program Policy v2.0 §2.3. Certificates signed before that date are unaffected; the trigger is the signing date, not the validity period.",
+            "scenario": "The exposure is the identity-only S/MIME profile — certificates issued to a person or device that carry emailProtection because a template always included it, but bind no mailbox. Those stop being conformant on renewal, and the fix is either a real rfc822Name in the SAN or removing the emailProtection EKU from the template. Worth auditing before the renewal wave rather than during it: it is a template change on the CA side, not something a subscriber can patch on the endpoint.",
+        },
+    },
+    {
+        "id": "apple-policy-v2-single-trust-purpose",
+        "date": "2027-07-01",
+        "title": "Apple: Sub-CAs dedicated to one Trust Purpose, Markdown CP/CPS per Trust Purpose, DCR attestation",
+        "description": "Apple Root Program Policy v2.0 lands three obligations on 2027-07-01. (1) §1.7: a Subordinate CA Certificate signed on or after 2027-07-01 MUST be dedicated to a single Trust Purpose as defined in Appendix A — the (b) carve-out that ran from 2026-08-01 ends. (2) §1.3.1: all Policy Documents MUST be a combined CP/CPS in Markdown with a .md extension (the Markdown file is authoritative in CCADB), self-contained on the CA's own practices rather than incorporating requirements by reference, and each CP/CPS MUST be scoped to a single Trust Purpose — a CP/CPS may combine only \"Server Authentication\" with \"Legacy TLS\", or \"Secure Email\" with \"Legacy S/MIME\". Trust Purposes and required EKUs must be stated in CP/CPS section 1.4, and a root hierarchy supporting several Trust Purposes needs a distinct document for each. (3) §1.2.3.1: for audit periods starting on or after 2027-07-01 the CA Owner MUST ensure the auditor produces a Detailed Controls Report carrying the four core elements, ensure the auditor contract permits sharing it with Apple, and review it before the attestation letter is finalized. Mozilla sets its own DCR requirement on the same date under MRSP v3.1 — separate root programs, tracked separately.",
+        "source": "apple",
+        "source_url": "https://github.com/apple/apple-root-program/blob/main/policy.md",
+        "category": "audit",
+        "isMajor": True,
+        "impact": "CA Owners in the Apple program must have their hierarchies split by Trust Purpose, their CP/CPS set rewritten as per-Trust-Purpose Markdown documents, and DCR-capable audit engagements contracted before an audit period starting on or after 2027-07-01.",
+        "is_estimated": False,
+        "consequences": {
+            "enforcement": "Apple Root Program Policy v2.0 requires single-Trust-Purpose dedication for Sub-CA certificates signed on or after 2027-07-01 (§1.7), Markdown CP/CPS documents scoped to one Trust Purpose (§1.3.1), and Detailed Controls Report attestation duties for audit periods starting on or after that date (§1.2.3.1). All three run through the root program's audit and incident machinery rather than a browser-side technical block.",
+            "scenario": "No action unless you operate a CA, and the deadline is earlier than it looks for anyone whose audit period starts on 1 July: the DCR duty attaches to the period, so the auditor contract and report format have to be settled before the period opens, not before the report is filed. The CP/CPS work is the heavier half — a multi-purpose hierarchy documented in one PDF becomes several Markdown documents, each describing practices rather than citing requirements, with the Trust Purpose and EKUs declared in section 1.4.",
+        },
+    },
 ]
 
 # =============================================================================
@@ -1548,6 +1602,12 @@ REGULATORY_FRAMEWORKS = [
                 "id": "nis2-netherlands-cbw",
                 "title": "Netherlands Cyberbeveiligingswet Effective",
                 "date": "2026-08-15",
+                # type (b) in-force regime, same as the other national NIS2
+                # entries. Set on 2026-08-15, its commencement date: it could
+                # not carry "ongoing" while future-dated (the date-consistency
+                # test requires future entries to compute "upcoming"), and
+                # from 2026-08-16 it would otherwise render green "Completed".
+                "status": "ongoing",
                 "source_url": "https://zoek.officielebekendmakingen.nl/stb-2026-189.html",
                 "category": "national",
                 "impact": "Dutch entities in scope must register with the NCSC via mijn.ncsc.nl, meet the duty of care for network and information system security, and report significant incidents to their CSIRT within the statutory deadlines.",
@@ -1958,7 +2018,9 @@ ROOT_STORES = [
     {
         "id": "apple",
         "name": "Apple Root Certificate Program",
-        "version": "2024",
+        # Policy v2.0, effective 2026-08-01, read from the repo's policy.md
+        # header on 2026-08-15. The card said "2024" until then.
+        "version": "2.0 (Effective 2026-08-01)",
         "url": "https://github.com/apple/apple-root-program",
         "platforms": ["Safari", "iOS", "iPadOS", "macOS"],
         "keyRequirements": [
@@ -1968,7 +2030,8 @@ ROOT_STORES = [
             "Initiated 398-day max validity (2020)"
         ],
         "recentActions": [
-            {"action": "Entrust distrust", "date": "2024-11-15", "description": "Safari/iOS distrusts Entrust for TLS, S/MIME, timestamping"}
+            {"action": "Entrust distrust", "date": "2024-11-15", "description": "Safari/iOS distrusts Entrust for TLS, S/MIME, timestamping"},
+            {"action": "Root Program Policy v2.0", "date": "2026-08-01", "description": "Trust Purposes defined (Appendix A); Sub-CA certificates signed on/after 2026-08-01 need an EKU and must not assert anyExtendedKeyUsage; Apple approval required before issuing to an Externally Operated Sub-CA; new root submissions must be RSA 4096-bit or ECDSA 384-bit minimum"}
         ],
         "evDisplay": "Shows organization in certificate details",
         "revocationMethod": "OCSP",
@@ -2662,9 +2725,9 @@ RELATED_RFCS = [
 
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
-    "lastUpdated": "2026-08-07",
-    "dataVersion": "2.4.16",
-    "basedOn": "CA/B Forum TLS BR 2.2.9, Code Signing BR 3.11, EV Guidelines 2.0.3, S/MIME BR 1.0.15, SC-080/081/085/090/091/092/097/098/099/101 Ballots, SMC017v2, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Store Policy, Microsoft Trusted Root Program Requirements v1.2, NIST SP 800-131A Rev 3 (initial public draft), NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547 (initial public draft), NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
+    "lastUpdated": "2026-08-15",
+    "dataVersion": "2.4.17",
+    "basedOn": "CA/B Forum TLS BR 2.2.9, Code Signing BR 3.11, EV Guidelines 2.0.3, S/MIME BR 1.0.15, SC-080/081/085/090/091/092/097/098/099/101 Ballots, SMC017v2, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Program Policy v2.0, Microsoft Trusted Root Program Requirements v1.2, NIST SP 800-131A Rev 3 (initial public draft), NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547 (initial public draft), NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
         "https://cabforum.org",
@@ -2686,7 +2749,7 @@ DATA_FRESHNESS = {
     "nextReviewDue": "2026-08-30",
     "reviewIntervalDays": 30,
     "fieldVerifications": {
-        "deadlines": {"verified": "2026-08-07", "source": "2026-08-07 targeted apply (NOT a full review; lastFullReview stays 2026-07-31): Microsoft August 2026 Trusted Root Program deployment notice applied, from the primary instrument fetched directly (https://raw.githubusercontent.com/TrustedRootProgram/Program-Requirements/main/trusted-root/2026/august-2026.md, HTTP 200, 9336 bytes) rather than from a report. Two date-certain obligations, both day-precise IN THE SOURCE with no derivation: release 2026-08-25 ('On Tuesday, August 25, 2026, Microsoft released an update...', matching the document's own ms.date front matter) and NotBefore 2026-09-15 ('The NotBefore date is set to September 15, 2026. This means only certificates issued after this date will be distrusted'). Split into TWO entries deliberately, departing from the single-entry April 2026 precedent, because the release carries two DIFFERENT mechanisms on two different dates: microsoft-august-2026-root-disable (2026-08-25) for the outright Disable of Baltimore CyberTrust Root and GeoTrust Universal CA plus the Removal of Visa Information Delivery Root CA, which breaks every certificate under those roots regardless of issuance date; and microsoft-august-2026-ctl-notbefore (2026-09-15) for the NotBefore sets, which break only new issuance. Folding a root disable into a 'renewals break' entry would have understated it. Counts reconciled against the source: 8 ML-DSA PQC pilot roots added, 19 roots fully NotBefore'd (9 Entrust/AffirmTrust + 6 SecureTrust/Trustwave + 4 others), 2 disabled, 1 removed, per-EKU NotBefores of 3 code signing / 10 S/MIME / 4 time stamping / 3 server auth / 2 client auth / 1 document signing. Neither entry persists status - both are future-dated and compute 'upcoming'. CAVEAT recorded honestly: the notice states only the one NotBefore date and lists Disable/Remove as separate actions of the release without restating a date for them, so 2026-08-25 for the disable entry is the release date, not a date the source attaches to the disable action. This corroborates COWORK's 2026-08-05T18:36:00Z FINDING in every particular checked; it is now independently established rather than an attributed claim. SIDE EFFECT worth knowing: 2026-09-15 now carries FOUR obligations, not the three recorded in the 2026-07-31 note below - SC-097 SHA-1 CA/CRL sunset, CSC-32 reserved policy OID, the S/MIME CA RSA-4096 key floor, and now this Microsoft NotBefore. Prior review 2026-08-06 targeted apply: SC0101v2 HOLD RELEASED and applied. Its IPR Review Period (2026-07-07 08:00 to 2026-08-06 08:00 UTC, verbatim from the ballot page's Notice of Review Period) closed with NO Notice to Exclude Essential Claims. Verified in the live venue - https://groups.google.com/a/groups.cabforum.org/g/public, readable anonymously - because lists.cabforum.org/pipermail is a DEAD host, not a frozen archive. The whole list shows no activity after 2026-07-30; plain-term searches (Google Groups group-search silently zeroes any query carrying after:/before:, so date operators must never be used) return newest 'exclusion' 2026-04-29, newest 'essential claims' 2026-02-19, and one 'SC101' hit in the 2026-07-02 plenary minutes. Publication confirmed against the normative text, not the ballot page alone: cabforum/servercert main merged 'SC-101v2: Clarify Authorization Domain Names (#627)' at 2026-08-06T12:30Z and docs/BR.md now carries version-history row 2.2.9 | SC101 | adopted 2026-07-02 | effective 2026-08-06, the 2026-11-15 row in the Section 1.2.2 Relevant Dates table, and the Section 3.2.2.4 transition sentence. Added sc101v2-adn-derivation-mandatory (2026-11-15, major, upcoming). NOTE the fallback names BR Version 2.2.7, not 2.2.8 - a CA may comply with 3.2.2.4 of v2.2.7 until 2026-11-15. TLS BR doc version BUMPED 2.2.8 -> 2.2.9 (CABF_DOCUMENTS tls-br, date Jun -> Aug 2026) and basedOn updated, on Pat's instruction the same day, reversing the initial decision to leave it queued behind the tlsbr hold. Justified by the normative text: BR.md's own version-history table stamps 2.2.9 effective 2026-08-06, which is the publication event. Two lagging surfaces do NOT contradict that and are expected to catch up - the BRs/v2.2.9 release tag was not yet cut and cabforum.org's documents page still listed 2.2.8 as Current Version when this was written. The tlsbr manual hold (to 2026-08-20) is deliberately NOT retired by this bump: it still queues AUTO-proposed doc bumps, which matters because SC102's IPR window does not close until 2026-08-13 and may land a further version; its expiry stays owned by the 2026-08-16 task. Prior review 2026-07-31: SMC017v2 HOLD RELEASED and applied. The IPR Review Period (2026-06-30 20:00 to 2026-07-30 20:00 UTC, per the ballot's own Review Notice) closed with no Exclusion Notice, confirmed by publication of S/MIME BR v1.0.15 on 2026-07-30 (cabforum/smime release tag Ballot_SMC017; the CABF S/MIME documents page lists v1.0.15 as adopted by SMC017v2). Added smc017-smime-ca-rsa-4096 (2026-09-15 - the trigger is key CREATION date, NOT certificate issuance date) and smc017-smime-subca-3072-issuance-sunset (2027-09-15); both upcoming, neither ongoing. smime-br doc bumped 1.0.14 -> 1.0.15. Netherlands NIS2 RESOLVED after three appearances: primary source is the Cyberbeveiligingsbesluit, Besluit van 8 juli 2026, Staatsblad 2026 nr. 189 (published 2026-07-10), which sets Cyberbeveiligingswet commencement at 2026-08-15; added nis2-netherlands-cbw at day precision, is_estimated false. It is an ONGOING_IDS candidate (type b, in-force regime) only AFTER 2026-08-15 - a future-dated ongoing entry breaks the date-consistency test. EV Guidelines discrepancy CLOSED: v2.0.3 dated 6 July 2026 adopted via SC087, so the auto-applied doc bump was correct; basedOn corrected (it still said 2.0.2). SC102 hold confirmed against its 2026-07-14 Review Notice (window 2026-07-14 08:00 to 2026-08-13 08:00 UTC), pin kept at 2026-08-15; SC0101v2 hold unchanged at 2026-08-08. 2026-09-15 now carries THREE obligations: SC-097 SHA-1 CA/CRL sunset, CSC-32 reserved policy OID, and the S/MIME CA RSA-4096 floor. Prior review 2026-07-29: uk-csr-lords-stage and uk-csr-royal-assent advanced from 'second reading scheduled' to 'completed 14 Jul 2026, now at Committee stage' (legislative stage only, no new date-certain; Royal Assent estimate unchanged at 2026-12-31); SMC017v2 held pending IPR close. STANDING RULE from that review, still true: a CA/B Forum ballot's IPR Review Period runs 30 days from the Review Notice, NOT from the vote-completion date - read the window off the ballot page, never re-derive it as vote+30d. Prior review 2026-07-21 (Microsoft TRP blind-window)"},
+        "deadlines": {"verified": "2026-08-15", "source": "2026-08-15 targeted apply (NOT a full review; lastFullReview stays 2026-07-31): Apple Root Program Policy v2.0 applied, from the primary instrument fetched directly (https://raw.githubusercontent.com/apple/apple-root-program/main/policy.md, HTTP 200, 31247 bytes) rather than from a report. The document's header reads 'Version 2.0 / Effective 2026-08-01' and its Change Log row for v2.0 dates every obligation below; each was also read in its normative section. THREE entries, split by date because the dates differ: apple-policy-v2-subca-eku (2026-08-01, ongoing), apple-policy-v2-smime-rfc822name (2027-02-01), apple-policy-v2-single-trust-purpose (2027-07-01). (1) 2026-08-01, §1.7: a Subordinate CA Certificate signed on or after that date MUST contain an EKU extension and MUST NOT assert anyExtendedKeyUsage (2.5.29.37.0); signed on or after 2026-08-01 and before 2027-07-01 it must also be single-Trust-Purpose OR carry no Appendix A Trust-Purpose EKU under a multi-purpose root with an audited CP/CPS covering the use case. Bundled into the same entry because they share the date: §1.4's Apple approval before issuing a Sub-CA (or cross-sign) to an Externally Operated Subordinate CA, and §1.5's RSA 4096-bit / ECDSA 384-bit minimum for Root Inclusion Requests. CLASSIFIED ONGOING, deliberately, and this is the reusable part: §1.7 states that a renewal, re-key or cross-sign produces a NEW Subordinate CA Certificate whose signing date is the date of that issuance, so the rule bites again on every future Sub-CA signing rather than having transitioned once — type (b), added to ONGOING_IDS. CAVEAT recorded honestly: §1.4 and §1.5 state their requirements WITHOUT restating the date; only the Change Log attaches 2026-08-01 to them, which the entry text says in terms. (2) 2027-02-01, §2.3: all newly signed Subscriber certificates containing id-kp-emailProtection MUST include at least one rfc822Name in subjectAltName; upcoming, not ongoing. (3) 2027-07-01: §1.7 single Trust Purpose mandatory (the carve-out ends), §1.3.1 all Policy Documents must be Markdown CP/CPS scoped to a single Trust Purpose (only Server Authentication + Legacy TLS, or Secure Email + Legacy S/MIME, may combine), and §1.2.3.1 Detailed Controls Report attestation duties for audit periods starting on or after that date. Mozilla's own DCR requirement (mozilla-dcr-audit-periods, MRSP v3.1) is the SAME date and is deliberately NOT deduped against it — separate root programs, separate obligations on the same CA. Per the §2 note, issuance-related effective dates run from 00:00:00 UTC. Provenance: these reached us as COWORK's 2026-08-15T12:42:00Z handover after the 08-12 pipeline misclassified the policy as a content candidate under 'no-date-certain'; every date here was re-read from the source, not taken from the report. Czechia and Sweden from the same morning's back-check were checked and NOT added — nis2-czechia-effective (2025-11-01) and nis2-sweden-effective (2026-01-15) already exist in the NIS2 framework sub-list, both already ongoing and in ONGOING_IDS since 2026-07-30. nis2-netherlands-cbw promoted to status ongoing on its commencement date (2026-08-15) per the plan recorded in the 2026-07-31 note below; it could not carry the key while future-dated. Prior review 2026-08-07 targeted apply (NOT a full review; lastFullReview stays 2026-07-31): Microsoft August 2026 Trusted Root Program deployment notice applied, from the primary instrument fetched directly (https://raw.githubusercontent.com/TrustedRootProgram/Program-Requirements/main/trusted-root/2026/august-2026.md, HTTP 200, 9336 bytes) rather than from a report. Two date-certain obligations, both day-precise IN THE SOURCE with no derivation: release 2026-08-25 ('On Tuesday, August 25, 2026, Microsoft released an update...', matching the document's own ms.date front matter) and NotBefore 2026-09-15 ('The NotBefore date is set to September 15, 2026. This means only certificates issued after this date will be distrusted'). Split into TWO entries deliberately, departing from the single-entry April 2026 precedent, because the release carries two DIFFERENT mechanisms on two different dates: microsoft-august-2026-root-disable (2026-08-25) for the outright Disable of Baltimore CyberTrust Root and GeoTrust Universal CA plus the Removal of Visa Information Delivery Root CA, which breaks every certificate under those roots regardless of issuance date; and microsoft-august-2026-ctl-notbefore (2026-09-15) for the NotBefore sets, which break only new issuance. Folding a root disable into a 'renewals break' entry would have understated it. Counts reconciled against the source: 8 ML-DSA PQC pilot roots added, 19 roots fully NotBefore'd (9 Entrust/AffirmTrust + 6 SecureTrust/Trustwave + 4 others), 2 disabled, 1 removed, per-EKU NotBefores of 3 code signing / 10 S/MIME / 4 time stamping / 3 server auth / 2 client auth / 1 document signing. Neither entry persists status - both are future-dated and compute 'upcoming'. CAVEAT recorded honestly: the notice states only the one NotBefore date and lists Disable/Remove as separate actions of the release without restating a date for them, so 2026-08-25 for the disable entry is the release date, not a date the source attaches to the disable action. This corroborates COWORK's 2026-08-05T18:36:00Z FINDING in every particular checked; it is now independently established rather than an attributed claim. SIDE EFFECT worth knowing: 2026-09-15 now carries FOUR obligations, not the three recorded in the 2026-07-31 note below - SC-097 SHA-1 CA/CRL sunset, CSC-32 reserved policy OID, the S/MIME CA RSA-4096 key floor, and now this Microsoft NotBefore. Prior review 2026-08-06 targeted apply: SC0101v2 HOLD RELEASED and applied. Its IPR Review Period (2026-07-07 08:00 to 2026-08-06 08:00 UTC, verbatim from the ballot page's Notice of Review Period) closed with NO Notice to Exclude Essential Claims. Verified in the live venue - https://groups.google.com/a/groups.cabforum.org/g/public, readable anonymously - because lists.cabforum.org/pipermail is a DEAD host, not a frozen archive. The whole list shows no activity after 2026-07-30; plain-term searches (Google Groups group-search silently zeroes any query carrying after:/before:, so date operators must never be used) return newest 'exclusion' 2026-04-29, newest 'essential claims' 2026-02-19, and one 'SC101' hit in the 2026-07-02 plenary minutes. Publication confirmed against the normative text, not the ballot page alone: cabforum/servercert main merged 'SC-101v2: Clarify Authorization Domain Names (#627)' at 2026-08-06T12:30Z and docs/BR.md now carries version-history row 2.2.9 | SC101 | adopted 2026-07-02 | effective 2026-08-06, the 2026-11-15 row in the Section 1.2.2 Relevant Dates table, and the Section 3.2.2.4 transition sentence. Added sc101v2-adn-derivation-mandatory (2026-11-15, major, upcoming). NOTE the fallback names BR Version 2.2.7, not 2.2.8 - a CA may comply with 3.2.2.4 of v2.2.7 until 2026-11-15. TLS BR doc version BUMPED 2.2.8 -> 2.2.9 (CABF_DOCUMENTS tls-br, date Jun -> Aug 2026) and basedOn updated, on Pat's instruction the same day, reversing the initial decision to leave it queued behind the tlsbr hold. Justified by the normative text: BR.md's own version-history table stamps 2.2.9 effective 2026-08-06, which is the publication event. Two lagging surfaces do NOT contradict that and are expected to catch up - the BRs/v2.2.9 release tag was not yet cut and cabforum.org's documents page still listed 2.2.8 as Current Version when this was written. The tlsbr manual hold (to 2026-08-20) is deliberately NOT retired by this bump: it still queues AUTO-proposed doc bumps, which matters because SC102's IPR window does not close until 2026-08-13 and may land a further version; its expiry stays owned by the 2026-08-16 task. Prior review 2026-07-31: SMC017v2 HOLD RELEASED and applied. The IPR Review Period (2026-06-30 20:00 to 2026-07-30 20:00 UTC, per the ballot's own Review Notice) closed with no Exclusion Notice, confirmed by publication of S/MIME BR v1.0.15 on 2026-07-30 (cabforum/smime release tag Ballot_SMC017; the CABF S/MIME documents page lists v1.0.15 as adopted by SMC017v2). Added smc017-smime-ca-rsa-4096 (2026-09-15 - the trigger is key CREATION date, NOT certificate issuance date) and smc017-smime-subca-3072-issuance-sunset (2027-09-15); both upcoming, neither ongoing. smime-br doc bumped 1.0.14 -> 1.0.15. Netherlands NIS2 RESOLVED after three appearances: primary source is the Cyberbeveiligingsbesluit, Besluit van 8 juli 2026, Staatsblad 2026 nr. 189 (published 2026-07-10), which sets Cyberbeveiligingswet commencement at 2026-08-15; added nis2-netherlands-cbw at day precision, is_estimated false. It is an ONGOING_IDS candidate (type b, in-force regime) only AFTER 2026-08-15 - a future-dated ongoing entry breaks the date-consistency test. EV Guidelines discrepancy CLOSED: v2.0.3 dated 6 July 2026 adopted via SC087, so the auto-applied doc bump was correct; basedOn corrected (it still said 2.0.2). SC102 hold confirmed against its 2026-07-14 Review Notice (window 2026-07-14 08:00 to 2026-08-13 08:00 UTC), pin kept at 2026-08-15; SC0101v2 hold unchanged at 2026-08-08. 2026-09-15 now carries THREE obligations: SC-097 SHA-1 CA/CRL sunset, CSC-32 reserved policy OID, and the S/MIME CA RSA-4096 floor. Prior review 2026-07-29: uk-csr-lords-stage and uk-csr-royal-assent advanced from 'second reading scheduled' to 'completed 14 Jul 2026, now at Committee stage' (legislative stage only, no new date-certain; Royal Assent estimate unchanged at 2026-12-31); SMC017v2 held pending IPR close. STANDING RULE from that review, still true: a CA/B Forum ballot's IPR Review Period runs 30 days from the Review Notice, NOT from the vote-completion date - read the window off the ballot page, never re-derive it as vote+30d. Prior review 2026-07-21 (Microsoft TRP blind-window)"},
         "rootStores": {"verified": "2026-07-21", "source": "Individual root program policies. 2026-07-21: Microsoft source repointed to github.com/TrustedRootProgram/Program-Requirements (official since Oct 2025; superseded learn.microsoft.com page was monitored dead ~9 months) and converted from manual check to commits.atom feed. Blind-window review same day: Microsoft framework entry updated to Requirements v1.2 (single-purpose roots, 10-yr validity, incident reporting, CTLM) with April/June 2026 CTL actions."},
         "algorithmRequirements": {"verified": "2026-05-14", "source": "CA/B Forum TLS BR 2.2.6, NIST FIPS 203/204/205, NIST SP 800-131A Rev 3"},
         "caChains": {"verified": "2026-05-14", "source": "Official CA documentation"},
@@ -4955,23 +5018,70 @@ async def get_status(params: GetStatusInput) -> str:
 
 # --- Content candidates (Part A, 2026-08-07) --------------------------------
 # The research pipeline's fifth outcome: real, well-sourced, no date certain —
-# routed to content instead of the review queue. The ledger lives in the HOST
-# cron's data dir (~/.pki-compliance-mcp/content_candidates.json), which the
-# Docker MCP cannot see (its DATA_DIR is the /data volume), so this tool falls
-# back to the systemd API's route — same pattern as the pki_get_status peer
-# check.
+# routed to content instead of the review queue. The ledger is written by the
+# HOST cron, whose DATA_DIR is ~/.pki-compliance-mcp — and ONLY there.
+#
+# 2026-08-15: the ledger is resolved by an explicit path list, not by DATA_DIR
+# alone. DATA_DIR is per-runtime and two of the three runtimes point somewhere
+# the ledger has never been, which is what made /api/content-candidates and
+# pki_list_content_candidates serve an empty ledger for a week while the file
+# on disk held six rows:
+#   host cron   DATA_DIR=~/.pki-compliance-mcp          <- writes the ledger
+#   systemd API DATA_DIR=/opt/mcp-servers/pki-compliance-mcp/data (unit file)
+#   Docker MCP  DATA_DIR=/data (volume)
+# Repointing the unit's DATA_DIR would also move where state.json and news.json
+# resolve for the API process, so the path is made explicit here instead and
+# DATA_DIR is left alone (Pat's 2026-08-15 DECISION; mechanism was CC's call).
+# Order: CONTENT_CANDIDATES_FILE env override, this process's DATA_DIR, then
+# the cron dir. A readable NON-EMPTY ledger wins over a readable empty one, so
+# a stray empty file cannot shadow the real one. The Docker MCP still finds
+# nothing on disk (no /root/.pki-compliance-mcp in the container) and keeps
+# falling back to the API route — which now answers with real rows.
 
 CONTENT_CANDIDATES_FILE = DATA_DIR / "content_candidates.json"
+CRON_DATA_DIR = Path.home() / ".pki-compliance-mcp"
 PEER_API_CANDIDATES_URL = "https://compliance-api.fixmycert.com/api/content-candidates"
 
 
+def _content_candidates_paths() -> List[Path]:
+    """Ledger locations to try, in order, deduplicated."""
+    candidates = []
+    override = _os.environ.get("CONTENT_CANDIDATES_FILE")
+    if override:
+        candidates.append(Path(override))
+    # Module constant, not DATA_DIR directly: tests redirect it.
+    candidates.append(CONTENT_CANDIDATES_FILE)
+    candidates.append(CRON_DATA_DIR / "content_candidates.json")
+    seen, out = set(), []
+    for path in candidates:
+        key = str(path)
+        if key not in seen:
+            seen.add(key)
+            out.append(path)
+    return out
+
+
+def _read_content_candidates() -> tuple:
+    """(ledger, path) for the first readable ledger, preferring a non-empty
+    one; (None, None) if no path holds a readable JSON object."""
+    fallback = (None, None)
+    for path in _content_candidates_paths():
+        try:
+            data = json.loads(path.read_text())
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data:
+            return data, path
+        if fallback == (None, None):
+            fallback = (data, path)
+    return fallback
+
+
 def _load_content_candidates_local() -> Optional[dict]:
-    """The ledger from this process's DATA_DIR, or None if absent/unreadable."""
-    try:
-        data = json.loads(CONTENT_CANDIDATES_FILE.read_text())
-        return data if isinstance(data, dict) else None
-    except Exception:
-        return None
+    """The ledger, wherever it actually lives, or None if no path holds one."""
+    return _read_content_candidates()[0]
 
 
 @mcp_tool(
@@ -4999,11 +5109,11 @@ async def list_content_candidates(params: ListContentCandidatesInput) -> str:
     Returns:
         Candidates newest-first with rule, sink status, and source URLs
     """
-    ledger = _load_content_candidates_local()
-    source = str(CONTENT_CANDIDATES_FILE)
+    ledger, ledger_path = _read_content_candidates()
+    source = str(ledger_path)
     if ledger is None:
-        # Container case: no host ledger in /data. Ask the systemd API, which
-        # reads the cron's data dir directly.
+        # Container case: no ledger on any local path. Ask the systemd API,
+        # which resolves the cron's ledger directly.
         try:
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
                 r = await client.get(PEER_API_CANDIDATES_URL, headers={"Cache-Control": "no-cache"})
@@ -5011,7 +5121,8 @@ async def list_content_candidates(params: ListContentCandidatesInput) -> str:
                 ledger = r.json().get("candidates", {})
                 source = PEER_API_CANDIDATES_URL
         except Exception as e:
-            return (f"❌ No local ledger at {CONTENT_CANDIDATES_FILE} and the API "
+            tried = ", ".join(str(p) for p in _content_candidates_paths())
+            return (f"❌ No local ledger at any of [{tried}] and the API "
                     f"fallback failed ({type(e).__name__}: {e}). If no candidate has "
                     f"ever been classified, the ledger simply doesn't exist yet.")
     if not isinstance(ledger, dict):
@@ -5459,12 +5570,15 @@ li.review::before{{background:#fbbf24}}
                 return
 
             # Content-candidate ledger (Part A, 2026-08-07). Served by the
-            # systemd API, whose DATA_DIR is the host cron's data dir — the
-            # Docker MCP's pki_list_content_candidates falls back to this
-            # route because its /data volume never contains the ledger.
+            # systemd API, which resolves the cron's ledger by explicit path
+            # (see _content_candidates_paths — its own DATA_DIR points at a
+            # directory that has never held the file). The Docker MCP's
+            # pki_list_content_candidates falls back to this route because
+            # its /data volume never contains the ledger either.
             # Read-only, no cache: sink_status changes on every research run.
             if path == "/api/content-candidates":
-                ledger = _load_content_candidates_local() or {}
+                ledger, ledger_path = _read_content_candidates()
+                ledger = ledger or {}
                 pending_count = sum(1 for r in ledger.values()
                                     if isinstance(r, dict) and r.get("sink_status") == "pending")
                 self.send_response(200)
@@ -5476,6 +5590,9 @@ li.review::before{{background:#fbbf24}}
                     "candidates": ledger,
                     "total": len(ledger),
                     "pending_delivery": pending_count,
+                    # Which path answered — so an empty ledger can be told
+                    # apart from a ledger read out of the wrong directory.
+                    "source": str(ledger_path) if ledger_path else None,
                 }, indent=2).encode())
                 return
 
