@@ -4091,10 +4091,20 @@ def format_datetime(dt_str: str) -> str:
         return dt_str
 
 def days_until(date_str: str) -> int:
-    """Calculate days until a date."""
-    target = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    now = datetime.now(timezone.utc)
-    return (target - now).days
+    """Whole days from today (UTC) to a date. Negative once the date is past.
+
+    CALENDAR-DATE arithmetic, deliberately — not a timestamp difference.
+    This used to be `(target_midnight - now).days`, and timedelta.days floors
+    toward negative infinity, so a partial day always resolved AWAY from
+    today: 2026-08-01 read as -15 at 13:19 UTC on 2026-08-15 when 14 days had
+    elapsed, and a date 170 calendar days out read as 169. Worse than the
+    label, it made a deadline compute "passed" on its own due date, from
+    00:00:01 UTC onward — green "Completed" on the morning it actually bites.
+    Comparing dates gives 0 on the day itself, -1 the day after. (2026-08-15)
+    """
+    target = datetime.strptime(date_str, "%Y-%m-%d").date()
+    today = datetime.now(timezone.utc).date()
+    return (target - today).days
 
 
 # Stable column order for the deadlines CSV export. Nested feed fields are
@@ -4167,7 +4177,9 @@ def calculate_status(date_str: str, current_status: Optional[str] = None) -> str
     """Calculate deadline status based on date.
     
     If status is 'ongoing', it stays ongoing regardless of date.
-    Otherwise, calculates based on whether date is in the past.
+    Otherwise, calculates based on whether date is in the past. A deadline
+    due TODAY computes "upcoming", not "passed" — it has not passed until
+    the day is over (fixed with days_until, 2026-08-15).
     """
     if current_status == "ongoing":
         return "ongoing"
@@ -5604,8 +5616,10 @@ li.review::before{{background:#fbbf24}}
                 unified_deadlines = get_all_deadlines_unified()
                 deadlines_with_countdown = []
                 for d in unified_deadlines:
-                    target = datetime.strptime(d["date"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
-                    days = (target - now).days
+                    # days_until, not a second inline copy of the arithmetic:
+                    # this route carried its own timestamp-difference version
+                    # and inherited the same floor-toward-past off-by-one.
+                    days = days_until(d["date"])
                     deadlines_with_countdown.append({
                         **d,
                         "daysUntil": days,

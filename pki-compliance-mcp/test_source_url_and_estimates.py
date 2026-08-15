@@ -149,6 +149,32 @@ check("plain past entry (type a) still computes passed",
 check("future entries still compute upcoming",
       all(d["status"] == "upcoming" for d in unified if d["date"] > today))
 
+print("== day arithmetic is calendar-based (2026-08-15) ==")
+# days_until used to be a timestamp difference, and timedelta.days floors
+# toward negative infinity, so every partial day resolved AWAY from today:
+# a date 14 days back read -15, a date 170 days out read 169, and — the part
+# that was not cosmetic — a deadline computed "passed" on its own due date
+# from 00:00:01 UTC. These pin the three boundary days.
+from datetime import date as _date, timedelta as _timedelta
+
+_today = datetime.now(timezone.utc).date()
+check("today is 0, not -1", pki.days_until(_today.isoformat()) == 0)
+check("tomorrow is +1", pki.days_until((_today + _timedelta(days=1)).isoformat()) == 1)
+check("yesterday is -1", pki.days_until((_today - _timedelta(days=1)).isoformat()) == -1)
+check("14 days back reads -14, not -15",
+      pki.days_until((_today - _timedelta(days=14)).isoformat()) == -14)
+check("170 days out reads 170, not 169",
+      pki.days_until((_today + _timedelta(days=170)).isoformat()) == 170)
+check("a deadline due TODAY has not passed",
+      pki.calculate_status(_today.isoformat()) == "upcoming")
+check("a deadline due YESTERDAY has passed",
+      pki.calculate_status((_today - _timedelta(days=1)).isoformat()) == "passed")
+check("ongoing still bypasses the date entirely",
+      pki.calculate_status((_today - _timedelta(days=400)).isoformat(), "ongoing") == "ongoing")
+# The magnitude the front end renders as "Nd ago" must be the elapsed count.
+check("abs(days_until) is the elapsed-days count for a past date",
+      abs(pki.days_until((_today - _timedelta(days=14)).isoformat())) == 14)
+
 print("== CSV carries ongoing ==")
 import csv as _csv
 import io as _io
