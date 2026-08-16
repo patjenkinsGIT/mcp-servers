@@ -1938,8 +1938,8 @@ CABF_DOCUMENTS = [
     {
         "id": "ev-guidelines",
         "name": "EV Guidelines",
-        "version": "2.0.3",
-        "date": "Jul 2026",
+        "version": "2.0.4",
+        "date": "Aug 2026",
         "url": "https://cabforum.org/working-groups/server/extended-validation/documents/",
     },
     {
@@ -2736,9 +2736,9 @@ RELATED_RFCS = [
 
 # Metadata for the compliance hub
 COMPLIANCE_METADATA = {
-    "lastUpdated": "2026-08-15",
-    "dataVersion": "2.4.20",
-    "basedOn": "CA/B Forum TLS BR 2.2.9, Code Signing BR 3.11, EV Guidelines 2.0.3, S/MIME BR 1.0.15, SC-080/081/085/090/091/092/097/098/099/101 Ballots, SMC017v2, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Program Policy v2.0, Microsoft Trusted Root Program Requirements v1.2, NIST SP 800-131A Rev 3 (initial public draft), NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547 (initial public draft), NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
+    "lastUpdated": "2026-08-16",
+    "dataVersion": "2.4.21",
+    "basedOn": "CA/B Forum TLS BR 2.2.9, Code Signing BR 3.11, EV Guidelines 2.0.4, S/MIME BR 1.0.15, SC-080/081/085/090/091/092/097/098/099/101 Ballots, SMC017v2, Chrome Root Program v1.8, Mozilla Root Store Policy v3.1, Apple Root Program Policy v2.0, Microsoft Trusted Root Program Requirements v1.2, NIST SP 800-131A Rev 3 (initial public draft), NIST SP 800-57 Rev 5, NIST FIPS 203/204/205 (PQC), NIST IR 8547 (initial public draft), NSA CNSA 2.0, PCI DSS v4.0.1, DORA (EU), NIS2 (EU), UK CSR Bill",
     "disclaimer": "This is a community resource for educational purposes. Always verify against official sources before making compliance decisions.",
     "sources": [
         "https://cabforum.org",
