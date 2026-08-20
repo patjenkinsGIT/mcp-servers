@@ -16,7 +16,7 @@
     "urgent": true
   },
   "correction": {
-    "corrected_at": "2026-08-20T13:07:00Z",
+    "corrected_at": "2026-08-20T12:08:40Z",
     "corrected_by": "CC",
     "reason": "All five channels stated that mandated revocation was an open question. That framing was already false when written: Let's Encrypt answered the revocation question on the record on 2026-08-18, two days before this package was generated. The source_item above is preserved unedited as the record of what the pipeline emitted; it is NOT a citable source. Use corrected_provenance_urls and corrected_description below.",
     "corrected_description": "Let's Encrypt disclosed on 2026-08-10 that its CP/CPS lacked an explicit attestation of compliance with the latest Chrome Root Program Policy and CCADB Policy, required by 2026-06-15 under Section 1.1.3 of Chrome Root Program Policy v1.8. No certificate revocation follows: Let's Encrypt stated on 2026-08-18 that a CPS in violation of requirements 'does not affect the trust status of any certificates.' A CP/CPS document defect is not a certificate defect. Subscribers need take no action on their Let's Encrypt inventory. No deadline is created, changed or removed by this item; the only date in the story, 2026-06-15, is past and CA-side.",
