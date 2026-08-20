@@ -344,5 +344,48 @@ check("collapsing the signature does not narrow the hold set",
           {"id": "nis2-cjeu-referral-laggard-states",
            "description": "CJEU referral over NIS2 transposition failures"}))
 
+print("== deescalate_speculative_urgent ==")
+# The verbatim 2026-08-20 item: a research description that called the event
+# hypothetical still carried urgent:true into a five-channel content package.
+_le = {"id": "letsencrypt-cpcps-missing-attestation-incident",
+       "title": "Let's Encrypt CP/CPS Missing Chrome Root Program Attestation",
+       "description": ("Let's Encrypt became aware its CP/CPS lacked the required "
+                       "attestation of compliance with the Chrome Root Program Policy "
+                       "and CCADB Policy by the 2026-06-15 effective date. Community "
+                       "discussion (as of Aug 10-12, 2026) is debating whether this "
+                       "triggers mandated certificate revocation under Chrome/CCADB "
+                       "policy. This could constitute a mass-revocation event "
+                       "affecting Let's Encrypt-issued certificates;"),
+       "urgent": True}
+# MUST keep its flag: the event IS announced; only its scope is uncertain.
+_announced = {"id": "ca-x-mass-revoke", "title": "CA X announces mass revocation",
+              "description": ("CA X has announced it will revoke 200,000 certificates "
+                              "beginning 2026-09-01. It is unclear whether subscribers "
+                              "using cross-signed intermediates are affected."),
+              "urgent": True}
+_distrust = {"id": "root-distrust", "title": "Root distrust",
+             "description": "Chrome announced the distrust of Root Y effective 2026-10-01.",
+             "urgent": True}
+_changes = {"needs_human_review": [_le, _announced], "new_deadlines": [_distrust]}
+_hits = car.deescalate_speculative_urgent(_changes)
+check("speculative mass-revocation downgraded", _le["urgent"] is False)
+check("downgrade records the matched phrase", _le.get("urgent_downgraded") == "debating whether")
+check("announced event with uncertain SCOPE keeps urgent", _announced["urgent"] is True)
+check("plain announced distrust keeps urgent", _distrust["urgent"] is True)
+check("only the speculative item downgraded", len(_hits) == 1)
+# The bounded-downside property that lets this run as code at all: the item is
+# never moved or dropped, so it still reaches the review queue and the backlog.
+check("downgraded item stays in its list", _le in _changes["needs_human_review"])
+check("non-urgent items untouched",
+      car.deescalate_speculative_urgent(
+          {"needs_human_review": [{"id": "x", "description": "could constitute a problem"}]}) == [])
+
+print("== research prompts carry today's date ==")
+_today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+_p = car._dated("Search for CA/Browser Forum ballot results from the last 30 days.")
+check("today's date injected", _today in _p)
+check("original query preserved", "last 30 days" in _p)
+check("latest-state instruction present", "LATEST state" in _p or "latest state" in _p.lower())
+
 print(f"\n{PASS} passed, {FAIL} failed")
 raise SystemExit(1 if FAIL else 0)

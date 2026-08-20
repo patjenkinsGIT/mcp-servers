@@ -109,10 +109,42 @@ RESEARCH_QUERIES = [
 # ---------------------------------------------------------------------------
 
 
+def _dated(prompt: str) -> str:
+    """Prefix a research query with today's date and a recency instruction.
+
+    Every RESEARCH_QUERIES prompt says "the last 30 days", and until
+    2026-08-20 nothing ever told the model what today was — no system prompt,
+    no date, so the window was unanchored and unenforceable and the model fell
+    back on whatever its search results happened to surface. That is the shape
+    behind the 2026-08-20 Let's Encrypt description, which hedged itself as
+    "as of Aug 10-12, 2026" on a run that executed on 08-20 and then carried
+    that eight-day-old framing into a content package.
+
+    The date goes in the USER turn, not a system prompt: it changes daily, and
+    a volatile system prefix is what breaks prompt caching if caching is ever
+    turned on here.
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return (
+        f"Today's date is {today} (UTC). Every relative window below - \"the "
+        "last 30 days\" and any similar phrase - is relative to that date, "
+        "not to your training data.\n\n"
+        "Report the LATEST state of each thing you find, not the first "
+        "account of it. Where a source says a matter is unresolved, pending, "
+        "disputed, or under discussion, look for a more recent source that "
+        "settles it - a follow-up post, a reply further down the same thread, "
+        "or a later thread - and report what is true now. If you cannot "
+        "establish the current state, say so explicitly and date the claim, "
+        "rather than presenting stale information as current.\n\n"
+        f"{prompt}"
+    )
+
+
 def research(prompt: str, max_retries: int = 3) -> str:
     """Call Claude API with web_search tool to research PKI updates."""
     if not ANTHROPIC_API_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY environment variable is not set")
+    prompt = _dated(prompt)
 
     for attempt in range(max_retries):
         try:
@@ -287,11 +319,31 @@ Each new_deadline should match this format:
   "impact": "Brief impact statement",
   "is_estimated": true/false (true unless a primary source explicitly states the exact day),
   "feed_confirmed": true/false (true ONLY when the research findings for this item cite a tracked source document or feed that was flagged as changed; when in doubt, false),
-  "urgent": true/false (true ONLY for items demanding action on a weeks-not-months timescale: an announced mass revocation event, distrust/removal of a currently trusted root or CA, or a new compliance obligation taking effect within ~60 days; default false)
+  "urgent": true/false. Default false. Set it true ONLY if the item clears ALL THREE tests:
+    1. ANNOUNCED, NOT SPECULATED. The triggering event must be stated as fact by an \
+authoritative source - the CA, the root program, or the regulator. If the finding says \
+something "could", "may", or "might" happen, that an outcome is unconfirmed or unclear, \
+or that a community, forum, or working group is debating or considering whether a rule \
+requires it, that is NOT an announcement: urgent stays false. Speculation about a mass \
+revocation is not a mass revocation. Report such items normally - just do not escalate them.
+    2. READER ACTION, NOT CA HOUSEKEEPING. The obligation must fall on the enterprise \
+certificate team. A CA's own compliance problem is NOT urgent for subscribers: a defect \
+in its CP/CPS or other policy documents, a missing attestation, an audit finding, or an \
+incident report it filed about itself. A DEFECTIVE POLICY DOCUMENT IS NOT A DEFECTIVE \
+CERTIFICATE - only mis-issuance of certificates carries subscriber-side revocation.
+    3. WEEKS, NOT MONTHS. One of: an announced mass revocation event; an announced \
+distrust or removal of a currently trusted root or CA; or a new compliance obligation \
+with a date certain falling within ~60 days of today's date, which is given in the user \
+message. A date that has already passed does not qualify.
 }
 
-needs_human_review items may also carry "urgent": true under the same criteria \
-(e.g. an unverified report of an imminent mass revocation still deserves the flag).
+needs_human_review items may also carry "urgent": true under those same three tests. \
+One nuance on test 1: a report you could not fully verify may still be urgent IF what is \
+reported is an announcement that has already happened - "CA X has announced a mass \
+revocation", from a source you could not corroborate, still deserves the flag. That is \
+different from speculation about whether an event might occur, or from a community \
+arguing over what a rule requires; those fail test 1 no matter how confidently they are \
+written.
 
 PROVENANCE (required on every needs_human_review item):
 Each needs_human_review item MUST carry "provenance_urls": a list of 1-3 URLs you \
@@ -372,7 +424,15 @@ def analyze_diff(research_results: dict, current_data: dict | None) -> dict:
             "metadata": current_data.get("metadata", {}),
         }, indent=2)
 
+    # Today's date is required, not decorative: the "urgent" rule turns on an
+    # obligation "taking effect within ~60 days", and until 2026-08-20 this
+    # call was never told what today was, so that test could not actually be
+    # applied. It goes in the user turn, after the cacheable system prefix.
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     prompt = (
+        f"## Today's date\n\n{today} (UTC). Evaluate every relative window "
+        "against this date - in particular the \"~60 days\" test for the "
+        "`urgent` flag, and whether a date has already passed.\n\n"
         f"## Research Findings\n\n"
         + "\n\n".join(
             f"### {q_id}\n{text}"
@@ -853,6 +913,74 @@ CONTENT_CANDIDATE_RULES = [
 CONTENT_RULE_NAMES = {name for name, _ in CONTENT_CANDIDATE_RULES} | {"no-date-certain"}
 
 _DIFF_FAILURE_MARKER_PREFIX = "Diff response unparseable"
+
+# Backstop for test 1 of the `urgent` rule in DIFF_SYSTEM_PROMPT ("announced,
+# not speculated"). Markers that describe the ESCALATING EVENT as hypothetical.
+_URGENT_SPECULATION = re.compile(
+    r"\b(could|may|might)\s+(constitute|trigger|require|mandate|force|lead to"
+    r"|result in|mean)"
+    r"|\b(debat|discuss|argu)\w*\s+(over\s+)?whether"
+    r"|\bwhether\s+(this|it|that|the\s+\w+)\s+"
+    r"(triggers?|requires?|forces?|constitutes?|mandates?)"
+    r"|\b(not|un)\s?confirmed\b"
+    r"|\bunclear whether\b"
+    r"|\bno (ruling|decision|determination|mandate)\b"
+    r"|\b(potential|possible)(ly)?[\s-]+(mass[\s-]?revocation|revocation|distrust)",
+    re.IGNORECASE)
+
+# Markers that something authoritative has actually stated the event happened
+# or is scheduled. Their presence protects a flag from the de-escalation above.
+_URGENT_ANNOUNCEMENT = re.compile(
+    r"\b(has |have )?announced\b"
+    r"|\bwill (revoke|distrust|remove|be revoked|be distrusted|be removed)\b"
+    r"|\brevocation (is |was )?(required|mandated|scheduled|underway|beginning)\b"
+    r"|\bis revoking\b|\bhas begun revoking\b|\bnotified subscribers\b"
+    r"|\b(effective|takes effect|deadline of|no later than)\s+\d{4}-\d{2}-\d{2}\b",
+    re.IGNORECASE)
+
+
+def deescalate_speculative_urgent(changes: dict) -> list[tuple]:
+    """Drop `urgent` where the item's own text calls the event hypothetical.
+
+    Why a code backstop exists for this at all: `urgent` is the flag that
+    bypasses every calm path. It sets the 🚨 subject prefix, fires the phone
+    push, and is the ONLY thing content_drafts.py selects on. On 2026-08-20 a
+    research description reading "This could constitute a mass-revocation
+    event" carried urgent:true straight into a five-channel content package
+    that told readers to inventory their certificates. The model rule already
+    said "announced"; this holds it to that word.
+
+    Conservative in both directions, deliberately:
+      - It fires only when a speculation marker is present AND no announcement
+        marker is, so "CA X announced a mass revocation, unclear which certs
+        are affected" keeps its flag — the speculation there is about scope,
+        not about whether the event happened.
+      - It clears ONLY the urgent flag. The item is not moved, reclassified or
+        dropped, so it still reaches the review queue, the daily email and the
+        rolling backlog exactly as before. That bounded downside is why this
+        can run as code where the content-candidate reclassification could
+        not: the cost of a wrong call here is a calmer email, not a lost item.
+
+    Returns [(source_key, id, matched_text)] for logging.
+    """
+    hits: list[tuple] = []
+    for key in ("new_deadlines", "updated_deadlines", "regulatory_updates",
+                "needs_human_review"):
+        items = changes.get(key)
+        if not isinstance(items, list):
+            continue
+        for it in items:
+            if not isinstance(it, dict) or not it.get("urgent"):
+                continue
+            text = _anchor_text(it)
+            m = _URGENT_SPECULATION.search(text)
+            if not m or _URGENT_ANNOUNCEMENT.search(text):
+                continue
+            it["urgent"] = False
+            it["urgent_downgraded"] = m.group(0)
+            iid = it.get("id") or (it.get("title") or "")[:60]
+            hits.append((key, iid, m.group(0)))
+    return hits
 
 
 def _content_rule_match(item) -> tuple[str, str] | None:
@@ -1384,6 +1512,15 @@ def main():
     changes, cc_moved = classify_content_candidates(changes)
     if cc_moved:
         log(f"Content-candidate backstop moved {len(cc_moved)} item(s) out of the review path")
+
+    # Step 3a3: hold the `urgent` rule to its own word "announced". Runs here,
+    # after sanitize and before dedup, so a downgraded item still flows through
+    # the normal review path — only the escalation is removed, never the item.
+    urgent_downgraded = deescalate_speculative_urgent(changes)
+    if urgent_downgraded:
+        log(f"Urgent backstop downgraded {len(urgent_downgraded)} speculative item(s):")
+        for kind, iid, matched in urgent_downgraded:
+            log(f"  - [{kind}] {iid}: speculative language {matched!r}, not an announcement")
 
     # Step 3b: Dedup against live DEADLINES + previously rejected items + the
     # last 14 days of review flags, so the morning email never re-proposes
