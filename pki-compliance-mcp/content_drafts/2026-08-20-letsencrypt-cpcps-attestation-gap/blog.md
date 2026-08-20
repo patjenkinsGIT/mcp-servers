@@ -1,30 +1,62 @@
-# Let's Encrypt's CP/CPS Is Missing a Required Attestation — What Your Cert Team Needs to Know
+# Let's Encrypt's CP/CPS Was Missing a Required Attestation — And No, Your Certificates Are Fine
 
-On August 10, 2026, Let's Encrypt disclosed on its community forum that its Certificate Policy/Certification Practice Statement (CP/CPS) does not contain the attestation of compliance with the Chrome Root Program Policy and the CCADB Policy that was required by June 15, 2026. Because Let's Encrypt is one of the largest public CAs on the web — and the backbone of most ACME automation — any open question about whether this gap could trigger revocation deserves your attention this week, even though a mandated revocation has **not** been confirmed as of this writing.
+On August 10, 2026, Let's Encrypt disclosed that its Certificate Policy/Certification Practice Statement (CP/CPS) did not contain an explicit attestation of compliance with the latest Chrome Root Program Policy and the CCADB Policy — an attestation required by June 15, 2026 under Section 1.1.3 of Chrome Root Program Policy v1.8.
+
+Because Let's Encrypt sits behind a very large share of the web's TLS certificates, the question that immediately followed was whether this forces mandated revocation. It does not. That answer is now on the record from Let's Encrypt itself, and the rest of this post explains why — because the reasoning is more useful than the incident.
 
 ## What happened
 
-Root programs (Chrome, and by extension CCADB) require CAs to publish an explicit attestation of policy compliance in their CP/CPS by a set effective date. Let's Encrypt became aware that its CP/CPS never contained that attestation by the June 15, 2026 deadline. The gap surfaced publicly in a Let's Encrypt community thread on August 10, with a follow-up discussion thread and a corresponding Mozilla Bugzilla bug (#2038351) opened to track it. As of August 10–12, 2026, the community and CA/Browser ecosystem are actively debating whether a missing attestation is a documentation oversight or a policy violation serious enough to trigger mandated certificate revocation under existing root program rules. No resolution, remediation plan, or revocation mandate has been published yet.
+Root programs require CAs to state, in their CP/CPS, that they comply with the current versions of the governing policies. Chrome Root Program Policy v1.8 set June 15, 2026 as the effective date for that explicit attestation. Let's Encrypt's CP/CPS did not carry it. Let's Encrypt had been tracking the work internally and missed the date, then disclosed the gap publicly on its community forum on August 10, 2026.
+
+The incident is tracked in Mozilla Bugzilla as bug **2062418**, "Let's Encrypt: CPS missing root program attestation."
+
+> A note on a wrong number in circulation: some early write-ups of this story cited Bugzilla 2038351. That is a different, unrelated Let's Encrypt incident — Gen Y cross-certified subordinate CAs missing the serverAuth EKU, from May 2026. If you see 2038351 attached to this story, it's the wrong bug.
+
+## Does this mean certificate revocation?
+
+No. Asked that question directly on the follow-up thread on August 18, 2026, Let's Encrypt answered:
+
+> "Certificate revocation is only required when certificates were issued in violation of the CPS or other relevant requirements. The CPS itself being in violation of requirements does not affect the trust status of any certificates."
+
+That is the CA stating its position on the record, and it settles the only question that had operational consequences for certificate holders.
+
+## Why a document defect is not a certificate defect
+
+This is the part worth keeping, because some version of it recurs every time a CA files an incident report.
+
+A CP/CPS is the document in which a CA describes what it does and commits to doing it. A certificate is a thing the CA issued. The two fail in different ways:
+
+- **The document is defective.** The CA's disclosure doesn't say something it was required to say. The remedy is to fix the document and file an incident report. The certificates that were issued during the gap were still issued according to practice — nothing about them changed when the omission was noticed, and nothing changes about them when the text is added.
+- **The certificates are defective.** Something was issued in violation of the requirements — a bad field, a disallowed EKU, an over-long validity period, a name that shouldn't have been signed. That is mis-issuance, and revocation timelines attach to it.
+
+This incident is the first kind. Reading it as the second is what produces an unnecessary fire drill.
+
+The reliable question to ask, before touching anything, is: **does the defect touch the certificates, or only the paperwork about them?** If a CA's own incident report describes a document that needs updating, the answer is usually the second — and your inventory is not involved.
 
 ## Who is affected
 
-- **Anyone with certificates issued by Let's Encrypt** — check your issuer field for ISRG Root X1/X2, or intermediates R3, R10, R11, E5, E6. This includes manual issuance and, more commonly, ACME automation (Certbot, acme.sh, cert-manager, and similar tooling).
-- **Enterprise teams whose PKI is entirely from other CAs** (DigiCert, Sectigo, internal/private PKI) generally need no action from this specific event — but confirm you don't have Let's Encrypt certs hiding in dev, staging, or shadow-IT environments, which is extremely common.
-- **CAs and root program participants** are the ones actually resolving the compliance question. If you don't operate a CA, this is a monitoring item, not (yet) a fire drill.
+- **If you hold Let's Encrypt certificates:** no action. Your certificates' trust status is unchanged. There is nothing to inventory, nothing to rotate, and no date on your calendar from this.
+- **If your PKI is entirely from other CAs:** no action, and no need to check whether stray Let's Encrypt certificates exist in dev or staging *for this reason*. (Knowing your full certificate inventory is good practice on its own merits — it just isn't something this incident creates a reason to do.)
+- **If you operate a CA:** this one is worth reading properly. The attestation requirement in Section 1.1.3 applies to you too, and the June 15, 2026 effective date has passed. Confirm your own CP/CPS carries it.
 
-## Key dates
+## The dates
 
-- **2026-06-15** — Effective date by which Chrome Root Program-trusted CAs, including Let's Encrypt, were required to have a CP/CPS attestation of compliance with the Chrome Root Program Policy and CCADB Policy.
-- **2026-08-10** — Let's Encrypt publishes community disclosure acknowledging the CP/CPS gap.
-- **2026-08-12** — Continued community and ecosystem discussion (including Mozilla Bugzilla #2038351) on whether the gap constitutes a violation requiring mandated revocation.
-- **TBD** — No confirmed remediation timeline or revocation mandate exists yet. Treat this as unresolved until an official ruling is published.
+- **2026-06-15** — Effective date of the CP/CPS attestation requirement under Section 1.1.3 of Chrome Root Program Policy v1.8. This date is in the past, and it bound CAs, not certificate holders.
+- **2026-08-10** — Let's Encrypt discloses the gap on its community forum.
+- **2026-08-18** — Let's Encrypt confirms on the record that no certificate revocation follows.
+
+There is no fourth date. This incident creates no deadline for anyone who simply uses certificates.
 
 ## What to do now
 
-1. **Inventory every Let's Encrypt-issued certificate** in your environment. Pull issuer data across all environments, including subdomains, internal tools, and anything managed by developers outside central cert tooling.
-2. **Map your automation dependencies.** Identify which ACME clients, cron jobs, and cert-manager clusters rely on Let's Encrypt, and confirm how quickly you could cut over to another CA if issuance or trust were disrupted.
-3. **Do not preemptively revoke or rotate certificates.** There is no confirmed mandate yet. Acting early wastes effort and risks breaking automation for no confirmed reason.
-4. **Assign an owner to monitor the official threads** — the Let's Encrypt community posts and the Mozilla Bugzilla bug — for the actual resolution or any CCADB/Chrome ruling.
-5. **Pressure-test your multi-CA contingency plan now**, while there's no deadline urgency. Prior Let's Encrypt incidents have carried revocation windows as short as a few days — you want that plan ready before you need it, not during.
+Nothing to your certificate inventory.
 
-This is a fast-moving, unresolved situation. We're tracking it alongside every other active PKI compliance deadline at [fixmycert.com/compliance](https://fixmycert.com/compliance) — check back there for updates as the Let's Encrypt and root program community reach a decision.
+If you want to take something from this, take the distinction: a CP/CPS defect is a CA compliance matter, and a mis-issuance is a certificate matter. Only the second one ever lands in your renewal calendar. Applying that filter to the next CA incident that trends will save you a week of unnecessary work.
+
+We track every PKI compliance deadline that *does* require action from you at [fixmycert.com/compliance](https://fixmycert.com/compliance) — this one didn't make the list, and that's the point.
+
+## Sources
+
+- Let's Encrypt disclosure, 2026-08-10: https://community.letsencrypt.org/t/2026-08-10-cps-missing-root-program-attestation/250212
+- Let's Encrypt follow-up on revocation, 2026-08-18: https://community.letsencrypt.org/t/re-2026-08-10-cps-missing-root-program-attestation/250462
+- Mozilla Bugzilla 2062418 — Let's Encrypt: CPS missing root program attestation

@@ -1,15 +1,17 @@
-Let's Encrypt disclosed on August 10, 2026 that its CP/CPS is missing a required attestation of compliance with the Chrome Root Program Policy and CCADB Policy — a deadline that passed on June 15, 2026.
+Let's Encrypt disclosed on August 10, 2026 that its CP/CPS was missing an explicit attestation of compliance with the Chrome Root Program Policy and the CCADB Policy — required by June 15, 2026 under Section 1.1.3 of Chrome Root Program Policy v1.8.
 
-The community (and a Mozilla Bugzilla thread) is now debating whether this gap requires mandated certificate revocation. As of today, that has not been confirmed either way.
+The question everyone asked was whether this forces certificate revocation. It doesn't, and that is now on the record. Asked directly on August 18, Let's Encrypt answered:
 
-Why this matters even before it's resolved: Let's Encrypt issues an enormous share of the web's TLS certificates via ACME automation. If you have any certs issued by ISRG Root X1/X2 or intermediates R3/R10/R11, you should know that right now — not after a decision drops.
+"Certificate revocation is only required when certificates were issued in violation of the CPS or other relevant requirements. The CPS itself being in violation of requirements does not affect the trust status of any certificates."
 
-If your PKI is entirely from other CAs, you likely need no action here. If you're not sure, that's the point of this post.
+That distinction is the whole story, and it's worth internalizing because it comes up every time a CA files an incident:
 
-What we're doing: inventorying LE-issued certs, checking ACME automation dependencies, and holding off on any rotation until there's an actual ruling.
+A CP/CPS is the document where a CA describes what it does. A certificate is the thing it issued. When the document is defective, the CA fixes the document and files an incident report — here, Bugzilla 2062418. When certificates were issued in violation of requirements, that's mis-issuance, and revocation timelines attach to it. This was the first kind, not the second.
 
-Are you finding Let's Encrypt certs in places you didn't expect?
+So: if you run Let's Encrypt certificates, there is nothing to inventory, nothing to rotate, and no deadline on your calendar from this. The only date in the story is June 15, 2026 — it's in the past, and it bound the CA, not you.
 
-Live tracker: https://fixmycert.com/compliance
+The useful habit isn't scanning your inventory every time a CA incident trends. It's asking one question first: does this defect touch the certificates, or only the paperwork about them?
+
+Live compliance tracker: https://fixmycert.com/compliance
 
 #PKI #TLS #CertificateManagement #LetsEncrypt #Compliance

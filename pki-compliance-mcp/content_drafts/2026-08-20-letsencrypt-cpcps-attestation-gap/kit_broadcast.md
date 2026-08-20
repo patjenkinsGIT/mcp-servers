@@ -5,33 +5,29 @@
 
 ## Subject
 
-Let's Encrypt CP/CPS is missing a required attestation
+Let's Encrypt's CP/CPS gap: no, your certs are fine
 
 ## Preview text
 
-Community debating mandated revocation since Aug 10 — check your LE certs first
+The revocation question got answered on the record — and the answer is no action
 
 ## Body
 
-Hey — quick one, and it's genuinely unresolved as I write this.
+Hey — short one, and it's good news wearing a scary headline.
 
-**What happened:** Let's Encrypt disclosed on August 10 that its CP/CPS never got the attestation of compliance with the Chrome Root Program Policy and CCADB Policy that was due by June 15. The community forum and a Mozilla Bugzilla thread are now debating whether this gap is enough to trigger mandated revocation of Let's Encrypt-issued certificates. No ruling yet.
+**What happened:** Let's Encrypt disclosed on August 10 that its CP/CPS was missing an explicit attestation of compliance with the Chrome Root Program Policy and the CCADB Policy, required by June 15 under Section 1.1.3 of Chrome Root Program Policy v1.8. The incident is tracked in Bugzilla 2062418.
 
-**Who's affected:** Anyone running certificates issued by Let's Encrypt — check for ISRG Root X1/X2 or intermediates R3, R10, R11 in your chain. If your whole inventory is DigiCert, Sectigo, or private PKI, you can mostly sit this one out — but double-check dev/staging environments, because LE certs hide there more often than people expect.
+**Does it mean revocation?** No. Asked point-blank on August 18, Let's Encrypt answered on the record: "Certificate revocation is only required when certificates were issued in violation of the CPS or other relevant requirements. The CPS itself being in violation of requirements does not affect the trust status of any certificates."
 
-**Key dates:**
-- June 15, 2026 — attestation deadline that was missed
-- Aug 10, 2026 — Let's Encrypt discloses the gap
-- Aug 12, 2026 — ecosystem debate ongoing, no resolution yet
-- TBD — no confirmed remediation or revocation mandate published
+**Why that's the whole story:** a CP/CPS is the document where a CA describes what it does. A certificate is the thing it issued. When the document is defective, the CA fixes the document and files an incident report. When certificates were issued in violation of requirements, that's mis-issuance — and that's when revocation timelines show up. This was the first kind.
 
-**What I'd do this week:**
-1. Pull a full inventory of every cert issued by Let's Encrypt across every environment, not just production.
-2. Map which ACME clients and renewal jobs depend on LE, so you know your blast radius.
-3. Don't rotate or revoke anything preemptively — there's no confirmed mandate, and jumping the gun just breaks automation.
-4. Put someone on watch duty for the official threads and the Bugzilla bug, and have your multi-CA fallback ready in case a short revocation window gets announced.
+**What you should do:** nothing. Your Let's Encrypt certificates' trust status is unchanged. Nothing to inventory, nothing to rotate, no date to put on the calendar. The only date in this story is June 15, 2026 — it's past, and it applied to the CA, not to you.
 
-I'll update the tracker the moment there's an actual ruling either way.
+The one thing worth keeping is the filter. Next time a CA incident starts trending, ask first: does this defect touch the certificates, or only the paperwork about them? Only the first kind ever reaches your renewal calendar.
+
+If you do run a CA yourself, that attestation requirement applies to you too and its date has passed — worth a look at your own CP/CPS.
+
+Everything that *does* need action from you is on the tracker:
 
 https://fixmycert.com/compliance
 

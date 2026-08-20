@@ -1,27 +1,28 @@
-# YouTube publish package - Let's Encrypt CP/CPS Attestation Gap - What To Do Now
+# YouTube publish package - Let's Encrypt's CP/CPS Gap: Why Your Certificates Are Fine
 
 ## Title
 
-Let's Encrypt CP/CPS Attestation Gap - What To Do Now
+Let's Encrypt's CP/CPS Gap: Why Your Certificates Are Fine
 
 ## NotebookLM audio prompt
 
-Create a NotebookLM audio overview styled as two senior PKI engineers talking to each other, genuinely alarmed that organizations don't know what's coming. Conversational back-and-forth, not a lecture, under 15 minutes total. Must cover: (1) Let's Encrypt's CP/CPS was found missing the required attestation of compliance with the Chrome Root Program Policy and CCADB Policy, due by June 15, 2026; (2) the gap was disclosed publicly on the Let's Encrypt community forum on August 10, 2026, with continued discussion through August 12, 2026, and a corresponding Mozilla Bugzilla bug (#2038351); (3) the open, unresolved debate over whether this gap legally/technically mandates revocation of Let's Encrypt-issued certificates under root program rules; (4) why this matters disproportionately given Let's Encrypt's scale and ACME automation footprint across the web; (5) what enterprise cert teams should do right now — inventory certs issued by ISRG Root X1/X2 and intermediates R3/R10/R11, map ACME automation dependencies, avoid premature rotation, and prepare multi-CA contingency plans; (6) explicitly state that no revocation mandate has been confirmed as of the recording, and this is a monitoring situation, not yet a confirmed mass-revocation event. The listener should walk away knowing exactly what happened, the relevant dates, why it's not yet a fire drill but could become one fast, and the concrete steps to take this week. Do not use the phrase 'years of experience' or reference how long either speaker has worked in the industry.
+Create a NotebookLM audio overview styled as two senior PKI engineers talking to each other, calm and slightly amused that a documentation problem got read as a revocation emergency. Conversational back-and-forth, not a lecture, under 15 minutes total. The tone is explanatory and reassuring throughout — at no point should either speaker suggest the audience is at risk or needs to act on their certificate inventory. Must cover: (1) Let's Encrypt disclosed on August 10, 2026 that its CP/CPS was missing an explicit attestation of compliance with the latest Chrome Root Program Policy and the CCADB Policy, required by June 15, 2026 under Section 1.1.3 of Chrome Root Program Policy v1.8; (2) the incident is tracked as Mozilla Bugzilla bug 2062418 — and note explicitly that some early coverage cited 2038351, which is a different and unrelated Let's Encrypt incident about Gen Y cross-certified subordinate CAs missing the serverAuth EKU; (3) the revocation question was asked directly on August 18, 2026 and answered on the record by Let's Encrypt, quoting them: "Certificate revocation is only required when certificates were issued in violation of the CPS or other relevant requirements. The CPS itself being in violation of requirements does not affect the trust status of any certificates."; (4) the central teaching point, given the most time — the difference between a defect in the CA's policy document and a defect in the certificates it issued: a document defect is remedied by fixing the document and filing an incident report, while mis-issuance is what carries revocation timelines, and only the second kind ever reaches a subscriber's renewal calendar; (5) the practical filter for the next CA incident that trends — ask whether the defect touches the certificates or only the paperwork about them, before touching anything; (6) explicitly state that listeners who hold Let's Encrypt certificates have nothing to inventory, nothing to rotate, and no deadline from this, and that the only date in the story, June 15, 2026, is in the past and applied to the CA rather than to them; (7) a brief note that anyone who actually operates a CA should confirm their own CP/CPS carries the attestation, since that requirement's date has passed. The listener should walk away understanding why this was never their problem, and equipped to triage the next one faster. Do not use the phrase 'years of experience' or reference how long either speaker has worked in the industry.
 
 ## NotebookLM visual prompt
 
-BACKGROUND: Dark navy (#0f172a) - solid, no gradients. ACCENT COLOR: Red #ef4444 (compliance). STYLE: Clean iconography, minimal clutter, dark mode native. TEXT: White #ffffff primary, gray #94a3b8 secondary. DO NOT: busy backgrounds, cartoon characters, 3D effects, stock photos. Additional content-specific elements: (1) a simple certificate-chain diagram showing ISRG Root X1/X2 down to intermediates R3/R10/R11 with a red warning glow on the CP/CPS document icon; (2) a horizontal timeline strip marking June 15, 2026 (deadline missed), August 10, 2026 (disclosure), and August 12, 2026 (ongoing debate) with a red pulsing 'unresolved' marker at the end; (3) a simple two-column icon comparing 'LE certs in your inventory = check now' vs 'other CA only = monitor'.
+BACKGROUND: Dark navy (#0f172a) - solid, no gradients. ACCENT COLOR: Red #ef4444 (compliance). STYLE: Clean iconography, minimal clutter, dark mode native. TEXT: White #ffffff primary, gray #94a3b8 secondary. DO NOT: busy backgrounds, cartoon characters, 3D effects, stock photos. Also avoid alarm iconography of every kind — no warning triangles, no pulsing or flashing markers, no distress glows; the visuals should read as explanatory, matching a story whose answer is 'no action required'. Additional content-specific elements: (1) a side-by-side contrast panel, which is the core visual of the piece — left side a document icon labelled 'CP/CPS' with a red accent outline and the caption 'defect here = CA fixes the document', right side a certificate icon in plain white with the caption 'defect here = revocation timelines', and a clear divider between them making the point that this incident sat entirely on the left; (2) a clean horizontal timeline strip marking June 15, 2026 (attestation due, CA-side), August 10, 2026 (Let's Encrypt discloses), and August 18, 2026 (Let's Encrypt confirms no revocation) — the last marker resolved and settled in appearance, not open-ended; (3) a simple two-column icon comparing 'you hold LE certs = no action' vs 'you operate a CA = check your own CP/CPS'.
 
 ## Description
 
-Let's Encrypt's CP/CPS is missing a required attestation of compliance with the Chrome Root Program Policy and CCADB Policy — a deadline that passed on June 15, 2026. The gap was disclosed on August 10, 2026, and the community is now debating whether it forces mandated certificate revocation. Nothing is confirmed yet, but if you run Let's Encrypt certificates, this is worth understanding today.
+Let's Encrypt disclosed on August 10, 2026 that its CP/CPS was missing an attestation of compliance with the Chrome Root Program Policy and CCADB Policy, required by June 15, 2026. The obvious next question was whether that forces certificate revocation. It doesn't — Let's Encrypt confirmed as much on the record on August 18. This video explains why, and why the distinction between a defective policy document and a defective certificate is worth knowing before the next CA incident trends.
 
 🔑 Key Points:
-- CP/CPS attestation deadline (June 15, 2026) was missed by Let's Encrypt
-- Disclosed publicly August 10, 2026; ecosystem debate ongoing through August 12
-- Mozilla Bugzilla bug #2038351 tracking the resolution
-- No confirmed mandated revocation yet — this is a monitoring situation
-- What enterprise cert teams should inventory and prepare this week
+- What the Section 1.1.3 attestation requirement is, and what Let's Encrypt missed
+- The revocation question, asked and answered on the record: no
+- Why a CP/CPS defect is not a certificate defect — the distinction that matters
+- If you hold Let's Encrypt certificates: nothing to inventory, nothing to rotate
+- The incident is Bugzilla 2062418 — not 2038351, which is a different incident
+- If you operate a CA: the attestation requirement applies to you and its date has passed
 
 📚 Full written guide: https://fixmycert.com/compliance
 🔗 More PKI education: https://fixmycert.com
@@ -30,14 +31,20 @@ Let's Encrypt's CP/CPS is missing a required attestation of compliance with the 
 
 ## Pinned comment
 
-📌 Key deadlines from this video:
-🔴 2026-06-15 — Chrome Root Program/CCADB attestation deadline missed by Let's Encrypt
-🟡 2026-08-10 — Gap publicly disclosed on Let's Encrypt community forum
-🟡 2026-08-12 — Ecosystem debate ongoing (Mozilla Bugzilla #2038351), no ruling yet
-🟢 TBD — No confirmed mandated revocation as of now — monitor, don't panic-rotate
+📌 The short version: this one needs nothing from you.
 
-Full compliance tracker: https://fixmycert.com/compliance
+🟢 If you hold Let's Encrypt certificates — no action. Trust status unchanged, nothing to rotate, no deadline.
+🟢 If you operate a CA — check that your own CP/CPS carries the Section 1.1.3 attestation.
+
+Timeline (no reader deadline in this story):
+• 2026-06-15 — attestation due under Chrome Root Program Policy v1.8 §1.1.3. Past, and CA-side.
+• 2026-08-10 — Let's Encrypt discloses the gap.
+• 2026-08-18 — Let's Encrypt confirms no certificate revocation follows.
+
+Incident report: Mozilla Bugzilla 2062418. (Early coverage citing 2038351 has the wrong bug — that's the unrelated Gen Y serverAuth EKU incident.)
+
+Deadlines that *do* need action from you: https://fixmycert.com/compliance
 
 ## Thumbnail prompt
 
-BACKGROUND: Solid dark navy (#0f172a). LEFT 60%: bold white text 2 lines max, heavy sans-serif — Line 1: 'LET'S ENCRYPT CP/CPS GAP' Line 2: 'REVOCATION RISK?'. RIGHT 40%: single certificate/document icon with a red #ef4444 glow and a small warning triangle indicator. NO faces, busy backgrounds, gradients, small text, more than 2 colors + white.
+BACKGROUND: Solid dark navy (#0f172a). LEFT 60%: bold white text 2 lines max, heavy sans-serif — Line 1: 'LET'S ENCRYPT CP/CPS GAP' Line 2: 'NO REVOCATION'. Line 2 should read as the settled answer, not a question — no question mark anywhere on the thumbnail. RIGHT 40%: a single document icon with a red #ef4444 outline, paired with a clean white certificate icon marked with a simple check, making the document-vs-certificate contrast readable at thumbnail size. NO faces, busy backgrounds, gradients, small text, warning triangles, alarm glows, or more than 2 colors + white.
