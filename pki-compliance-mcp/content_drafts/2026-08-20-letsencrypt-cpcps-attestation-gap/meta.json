@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-08-20T10:29:46.310306+00:00",
+  "kind": "flagged",
+  "signature": "text:letsencrypt cpcps missing attestation incident let s encrypt cp cps missing chrome",
+  "source_item": {
+    "id": "letsencrypt-cpcps-missing-attestation-incident",
+    "title": "Let's Encrypt CP/CPS Missing Chrome Root Program Attestation",
+    "description": "Let's Encrypt became aware its CP/CPS lacked the required attestation of compliance with the Chrome Root Program Policy and CCADB Policy by the 2026-06-15 effective date. Community discussion (as of Aug 10-12, 2026) is debating whether this triggers mandated certificate revocation under Chrome/CCADB policy. This could constitute a mass-revocation event affecting Let's Encrypt-issued certificates; needs verification of resolution/remediation timeline and whether revocation is mandated.",
+    "source": "chrome",
+    "provenance_urls": [
+      "https://community.letsencrypt.org/t/2026-08-10-cps-missing-root-program-attestation/250212",
+      "https://community.letsencrypt.org/t/re-2026-08-10-cps-missing-root-program-attestation/250462",
+      "https://bugzilla.mozilla.org/show_bug.cgi?id=2038351"
+    ],
+    "primary_url": "https://community.letsencrypt.org/t/2026-08-10-cps-missing-root-program-attestation/250212",
+    "urgent": true
+  },
+  "status": "draft - not published"
+}

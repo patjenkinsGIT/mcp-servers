@@ -1,0 +1,1 @@
+Let's Encrypt's CP/CPS is missing a required Chrome Root Program/CCADB attestation (deadline was 6/15/26). Community is debating whether this forces mandated revocation. Not confirmed yet — check your LE cert inventory now. #PKI #TLS https://fixmycert.com/compliance
