@@ -82,6 +82,23 @@ try:
 except ValueError:
     check("raises on no JSON", True)
 
+# generate() gained web_search on 2026-08-20 for source verification, so the
+# reply can now carry search prose with braces of its own AHEAD of the
+# package. The greedy first-brace-to-last-brace span cannot survive that; the
+# fallback walks TOP-LEVEL objects and takes the last one that parses.
+_SEARCHY = ('Found {"url": "https://example.com/a"} and {"n": 1}.\n\n'
+            '{"slug": "x", "source_check": {"verified": true}, '
+            '"blog_markdown": "brace { in a string"}')
+check("picks the package past brace-bearing search prose",
+      cd._extract_json(_SEARCHY)["slug"] == "x")
+check("picks the OUTERMOST object, not a nested one",
+      cd._extract_json(_SEARCHY)["source_check"] == {"verified": True})
+try:
+    cd._extract_json("{unbalanced and unparseable")
+    check("raises when no candidate parses", False)
+except ValueError:
+    check("raises when no candidate parses", True)
+
 print("== slugify ==")
 check("basic", cd.slugify("Mass Revocation: DigiCert!") == "mass-revocation-digicert")
 check("empty fallback", cd.slugify("!!!") == "urgent-item")
@@ -117,6 +134,25 @@ check("kit marked draft never auto-send", "never auto-send" in kit_text)
 meta = json.loads((out_dir / "meta.json").read_text())
 check("meta records signature", meta["signature"] == entry["sig"])
 check("meta marked unpublished", "not published" in meta["status"])
+# The source-verification result must survive into meta.json, so a drafter
+# that caught a stale source_item leaves a record instead of silently
+# writing better copy. Absent from DRAFTS here -> degrades, never KeyErrors.
+check("meta degrades when model omits source_check",
+      meta["source_check"] == {"verified": None}
+      and meta["requires_reader_action"] is None)
+_checked = cd.write_drafts(
+    tmp / "repo_drafts", "2026-07-17",
+    dict(DRAFTS, requires_reader_action=False,
+         source_check={"verified": True, "drafted_from": "sources",
+                       "discrepancies": ["desc called it unresolved; "
+                                         "source already answered it"]}),
+    entry)
+_m = json.loads((_checked / "meta.json").read_text())
+check("meta records a source-check discrepancy",
+      _m["source_check"]["drafted_from"] == "sources"
+      and len(_m["source_check"]["discrepancies"]) == 1)
+check("meta records the no-action classification",
+      _m["requires_reader_action"] is False)
 yt_text = (out_dir / "youtube.md").read_text()
 check("youtube.md has all sections",
       all(s in yt_text for s in ("Title", "NotebookLM audio prompt",

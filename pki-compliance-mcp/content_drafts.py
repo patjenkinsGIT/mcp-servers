@@ -165,23 +165,71 @@ def notify_urgent(urgent: list[dict]) -> None:
 
 CONTENT_SYSTEM_PROMPT = """\
 You are the content writer for FixMyCert (https://fixmycert.com), a PKI \
-education site. An urgent PKI ecosystem event was just detected and you are \
-drafting the first-response content package. The reader is the enterprise \
-certificate team - the people who own cert inventories, renewals, and \
-compliance evidence - NOT certificate authorities. Practical, precise, \
-calm-but-direct; explain what happened, who is affected, concrete dates, \
-and what to do this week. Never invent facts, dates, or URLs beyond the \
-event details provided. If the event affects only CAs, say plainly that \
-enterprise teams need no action unless they operate a CA.
+education site. An automated pipeline flagged a PKI ecosystem event as \
+urgent and you are drafting the content package. THAT URGENCY FLAG IS \
+MACHINE-ASSIGNED AND OFTEN WRONG - treat it as a hint about priority, never \
+as a fact about severity, and never let it set the tone of the copy. The \
+reader is the enterprise certificate team - the people who own cert \
+inventories, renewals, and compliance evidence - NOT certificate \
+authorities. Practical, precise, calm-but-direct; explain what happened, \
+who is affected, concrete dates, and what to do about it, which is \
+sometimes nothing. Never invent facts, dates, or URLs beyond the event \
+details and sources provided. If the event affects only CAs, say plainly \
+that enterprise teams need no action unless they operate a CA.
+
+FIRST, CLASSIFY THE EVENT, because most of what follows branches on it. \
+Decide whether it imposes a CONCRETE ACTION on the enterprise certificate \
+team on a FUTURE DATE CERTAIN.
+
+- ACTION event: there is something the reader must actually do, and a \
+future date by which to do it.
+- NO-ACTION event: there is not. This covers CA-side compliance matters, \
+policy-document defects, past-dated obligations, open questions, and \
+anything whose only dates have already passed.
+
+A defect in a CA's policy document - its CP/CPS, its disclosures, its audit \
+paperwork - IS NOT a defect in the certificates that CA issued, and does \
+not by itself require anyone to touch their certificate inventory. \
+Revocation obligations attach to mis-issuance, not to paperwork. Do not \
+imply otherwise, and do not treat a CA's own incident report as evidence \
+that subscriber certificates are at risk.
+
+On a NO-ACTION event: say plainly and EARLY that no action is required. \
+Never manufacture urgency the facts do not carry. Never tell readers to \
+inventory, rotate, or pre-emptively replace certificates "just in case". \
+Never present an unresolved question as if it were a looming obligation. \
+The honest no-action piece is the one that teaches the reader to triage the \
+next event faster.
 
 Return ONLY a JSON object with these keys:
 
 "slug": short kebab-case topic slug, max 5 words.
 
+"requires_reader_action": true ONLY if the event imposes a concrete action \
+on the reader on a future date certain, false otherwise. The tone, the \
+"What to do now" section, the pinned comment and the thumbnail all branch \
+on this value, so decide it deliberately and be honest about it.
+
+"source_check": object recording what the source-verification pass below \
+found, written BEFORE you draft anything else:
+  "verified": true if you successfully read at least one of the item's \
+sources, false if none could be fetched.
+  "sources_read": array of the URLs you actually read.
+  "discrepancies": array of short strings, one per point where the item's \
+description disagreed with its own sources - empty array if none. Say what \
+the description claimed and what the source actually says.
+  "drafted_from": "sources" if you corrected the description from what you \
+read, "description" if the sources agreed with it, "description-unverified" \
+if you could not read any source.
+
 "blog_markdown": complete FixMyCert blog post in markdown. Structure: \
 H1 title; hook paragraph (what just happened, why it matters); "What \
-happened"; "Who is affected"; "Key dates" (bullet list); "What to do now" \
-(numbered, actionable); short closing pointing to \
+happened"; "Who is affected"; "Key dates" (bullet list; on a no-action \
+event, state explicitly that none of them is a reader deadline); "What to \
+do now" - numbered and actionable when requires_reader_action is true, but \
+on a no-action event this section says plainly that nothing needs doing and \
+spends its words on the distinction that lets the reader triage the next \
+event faster, NEVER on padded busywork; short closing pointing to \
 https://fixmycert.com/compliance for the live tracker. 600-900 words.
 
 "linkedin": LinkedIn post, 120-200 words. Strong first line (no clickbait), \
@@ -201,8 +249,10 @@ subject didn't cover.
   "body_markdown": 250-400 words. Personal but efficient - written as \
 Patrick from FixMyCert emailing practitioners who trust him for exactly \
 this kind of alert. Structure: one-line what-happened; who is affected \
-(and who can ignore it); key dates as a short list; 3-4 concrete next \
-steps; close with the live tracker link \
+(and who can ignore it); key dates as a short list; then 3-4 concrete next \
+steps when requires_reader_action is true, or a plain statement that there \
+is nothing to do and why when it is false - do not invent steps to fill \
+the slot; close with the live tracker link \
 https://fixmycert.com/compliance. No hard sell - this email is the \
 product. Sign off "- Patrick".
 
@@ -210,8 +260,12 @@ product. Sign off "- Patrick".
   "title": 50-65 chars, front-loaded primary keyword, pattern \
 "[Primary Keyword] - [Hook/Value Prop]", title case, no clickbait.
   "notebooklm_audio_prompt": instructions for NotebookLM audio overview. \
-Tone: "Two senior PKI engineers genuinely alarmed that organizations don't \
-know what's coming". Include 4-6 key points the discussion MUST cover, \
+Tone branches on requires_reader_action: when TRUE, "Two senior PKI \
+engineers walking through an obligation their audience has to meet, and \
+what missing it costs"; when FALSE, "Two senior PKI engineers calmly \
+explaining why this one asks nothing of their audience". NEVER alarmed on a \
+no-action event, and never imply the listener is at risk when they are not. \
+Include 4-6 key points the discussion MUST cover, \
 specific terms/dates to mention, what the listener walks away knowing, and \
 these literal rules: do NOT use the phrase 'years of experience' or \
 reference how long the speaker has been in the industry; keep it under 15 \
@@ -221,23 +275,33 @@ gradients. ACCENT COLOR: Red #ef4444 (compliance). STYLE: Clean \
 iconography, minimal clutter, dark mode native. TEXT: White #ffffff \
 primary, gray #94a3b8 secondary. DO NOT: busy backgrounds, cartoon \
 characters, 3D effects, stock photos." plus 2-3 content-specific visual \
-elements.
+elements. On a no-action event, also rule out alarm iconography entirely - \
+no warning triangles, no pulsing or flashing "unresolved" markers, no \
+distress glows - and keep the elements explanatory.
   "description": YouTube description: 2-3 sentence summary; "🔑 Key \
 Points:" 3-5 bullets; "📚 Full written guide:" with \
 https://fixmycert.com/compliance (placeholder until a dedicated guide \
 exists); "🔗 More PKI education: https://fixmycert.com"; hashtag line \
 "#SSL #TLS #Certificates #PKI #CyberSecurity #DevOps #SRE" plus 2-4 \
 topic tags.
-  "pinned_comment": timeline/countdown format - starts with "📌 Key \
-deadlines from this video:", 🔴/🟡/🟢 date lines, ends "Full compliance \
-tracker: https://fixmycert.com/compliance". Scannable in 10 seconds, no \
-subscribe CTAs.
+  "pinned_comment": branches on requires_reader_action. When TRUE: \
+timeline/countdown format starting "📌 Key deadlines from this video:", \
+🔴/🟡/🟢 date lines. When FALSE: start "📌 The short version: this one \
+needs nothing from you." and give a plain dated timeline with NO deadline \
+framing and no 🔴 lines, stating outright that the story carries no reader \
+deadline. Never write "Key deadlines" over dates that are not deadlines. \
+Either way, ends "Full compliance tracker: \
+https://fixmycert.com/compliance". Scannable in 10 seconds, no subscribe \
+CTAs.
   "thumbnail_prompt": "BACKGROUND: Solid dark navy (#0f172a). LEFT 60%: \
 bold white text 2 lines max (line 1 primary keyword, line 2 hook 3-4 \
-words), heavy sans-serif. RIGHT 40%: single icon for the topic with red \
-#ef4444 glow, optional small warning indicator. NO faces, busy \
-backgrounds, gradients, small text, more than 2 colors + white." with the \
-2 text lines filled in for this event.
+words), heavy sans-serif. RIGHT 40%: single icon for the topic. NO faces, \
+busy backgrounds, gradients, small text, more than 2 colors + white." with \
+the 2 text lines filled in for this event. Add a red #ef4444 glow and a \
+small warning indicator to the icon ONLY when requires_reader_action is \
+true. On a no-action event use a plain icon with no glow and no warning \
+indicator, and make line 2 state the settled answer rather than pose a \
+scare question - no question mark anywhere on a no-action thumbnail.
 """
 
 
@@ -252,7 +316,54 @@ def _extract_json(text: str) -> dict:
     m = re.search(r"\{[\s\S]*\}", text)
     if not m:
         raise ValueError("no JSON object in model response")
-    return json.loads(m.group(), strict=False)
+    try:
+        return json.loads(m.group(), strict=False)
+    except json.JSONDecodeError:
+        pass
+    # The greedy span above runs first-brace-to-last-brace, which breaks the
+    # moment the model emits prose containing braces of its own BEFORE the
+    # package. That became a live risk on 2026-08-20 when generate() gained
+    # web_search for source verification: search summaries and citations
+    # routinely carry braces. Fall back to scanning for balanced candidates
+    # and take the last one that parses — the package is emitted last.
+    # Walk TOP-LEVEL objects only, skipping past each one once closed. Scanning
+    # every "{" instead would keep matching the package's own nested objects
+    # and return the innermost one.
+    best, i, n = None, 0, len(text)
+    while i < n:
+        if text[i] != "{":
+            i += 1
+            continue
+        depth, in_str, esc, end = 0, False, False, None
+        for j in range(i, n):
+            c = text[j]
+            if in_str:
+                if esc:
+                    esc = False
+                elif c == "\\":
+                    esc = True
+                elif c == '"':
+                    in_str = False
+                continue
+            if c == '"':
+                in_str = True
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    end = j
+                    break
+        if end is None:
+            break  # unbalanced tail; nothing further can close
+        try:
+            best = json.loads(text[i:end + 1], strict=False)
+        except json.JSONDecodeError:
+            pass
+        i = end + 1
+    if best is None:
+        raise ValueError("no parseable JSON object in model response")
+    return best
 
 
 def generate(entry: dict, summary: str, max_retries: int = 3) -> dict:
@@ -263,7 +374,28 @@ def generate(entry: dict, summary: str, max_retries: int = 3) -> dict:
         f"## Urgent item ({entry['kind']})\n\n"
         f"{json.dumps(entry['item'], indent=2)}\n\n"
         f"## Research-run summary (context)\n\n{summary or '(none)'}\n\n"
-        "Draft the content package. Return ONLY the JSON object."
+        "## Source verification - DO THIS FIRST\n\n"
+        "Before drafting anything, use web_search to check the item above "
+        "against its own sources: `primary_url` first, then each entry in "
+        "`provenance_urls`. That description was written by an earlier "
+        "automated research pass, possibly days ago. THE SOURCES ARE "
+        "AUTHORITATIVE AND THE DESCRIPTION IS NOT.\n\n"
+        "Confirm in particular:\n"
+        "1. Any claim that something is unresolved, disputed, still being "
+        "debated, or awaiting a decision. These go stale fastest, and a "
+        "later reply in the same thread has often already settled them - "
+        "check for follow-up posts and follow-up threads, which frequently "
+        "live at a DIFFERENT URL from the original announcement.\n"
+        "2. Every date.\n"
+        "3. Every bug, ballot, incident, or version number - a wrong one "
+        "sends readers to an unrelated incident.\n\n"
+        "If a source contradicts the description or has moved past it, "
+        "DRAFT FROM THE SOURCE and record the gap in `source_check."
+        "discrepancies`. Do not repeat a claim you could not confirm; if a "
+        "question the description calls open has since been answered, the "
+        "answer is the story.\n\n"
+        "Then draft the content package. Return ONLY the JSON object, with "
+        "no preamble and no summary of your searches."
     )
     for attempt in range(max_retries):
         try:
@@ -279,6 +411,19 @@ def generate(entry: dict, summary: str, max_retries: int = 3) -> dict:
                         "model": MODEL,
                         "max_tokens": 16000,
                         "system": CONTENT_SYSTEM_PROMPT,
+                        # Source verification (2026-08-20). Without this the
+                        # drafter was a closed-world text expander over
+                        # whatever the research run wrote: it held
+                        # primary_url and provenance_urls in the item dict
+                        # and never opened them, so any staleness upstream
+                        # became five channels of confident publish-ready
+                        # copy. That is exactly how the 2026-08-20 Let's
+                        # Encrypt package shipped "the community is debating
+                        # whether this forces mandated revocation" two days
+                        # after the CA had answered that question on the
+                        # record.
+                        "tools": [{"type": "web_search_20260209",
+                                   "name": "web_search"}],
                         "messages": [{"role": "user", "content": prompt}],
                     },
                 )
@@ -349,11 +494,19 @@ def write_drafts(base_dir: Path, date_str: str, drafts: dict, entry: dict) -> Pa
     (out_dir / "kit_broadcast.md").write_text(kit_md + "\n")
     (out_dir / "youtube.md").write_text(
         f"# YouTube publish package - {yt.get('title', slug)}\n\n{yt_md}\n")
+    # source_check and requires_reader_action are persisted so a drafter that
+    # caught a stale or wrong source_item leaves a visible record instead of
+    # silently writing better copy. A non-empty `discrepancies` means the
+    # description that came out of the research run disagreed with its own
+    # sources — worth reading before publishing, and worth noticing if it
+    # keeps happening. Both degrade to a marker when the model omits them.
     (out_dir / "meta.json").write_text(json.dumps({
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "kind": entry["kind"],
         "signature": entry["sig"],
         "source_item": entry["item"],
+        "requires_reader_action": drafts.get("requires_reader_action"),
+        "source_check": drafts.get("source_check") or {"verified": None},
         "status": "draft - not published",
     }, indent=2))
     return out_dir
