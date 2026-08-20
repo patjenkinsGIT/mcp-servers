@@ -375,17 +375,24 @@ def generate(entry: dict, summary: str, max_retries: int = 3) -> dict:
         f"{json.dumps(entry['item'], indent=2)}\n\n"
         f"## Research-run summary (context)\n\n{summary or '(none)'}\n\n"
         "## Source verification - DO THIS FIRST\n\n"
-        "Before drafting anything, use web_search to check the item above "
-        "against its own sources: `primary_url` first, then each entry in "
-        "`provenance_urls`. That description was written by an earlier "
-        "automated research pass, possibly days ago. THE SOURCES ARE "
-        "AUTHORITATIVE AND THE DESCRIPTION IS NOT.\n\n"
+        "Before drafting anything, USE web_fetch TO READ THE FULL TEXT of "
+        "the item's own sources: `primary_url` first, then each entry in "
+        "`provenance_urls`. Fetch them - do not rely on web_search snippets, "
+        "which show only the top of a page and routinely miss a decisive "
+        "reply partway down a thread. Use web_search only to find material "
+        "the item does not link, such as a follow-up thread. That "
+        "description was written by an earlier automated research pass, "
+        "possibly days ago. THE SOURCES ARE AUTHORITATIVE AND THE "
+        "DESCRIPTION IS NOT.\n\n"
         "Confirm in particular:\n"
         "1. Any claim that something is unresolved, disputed, still being "
-        "debated, or awaiting a decision. These go stale fastest, and a "
-        "later reply in the same thread has often already settled them - "
-        "check for follow-up posts and follow-up threads, which frequently "
-        "live at a DIFFERENT URL from the original announcement.\n"
+        "debated, or awaiting a decision. THESE GO STALE FASTEST AND ARE THE "
+        "MAIN REASON THIS STEP EXISTS. Read the whole thread, not its first "
+        "post: the answer is usually a later reply, often from the "
+        "organisation that filed the report, and often in a follow-up thread "
+        "at a DIFFERENT URL from the original announcement. If you find such "
+        "an answer, THE ANSWER IS THE STORY - lead with it, and do not "
+        "describe as open a question that has been closed.\n"
         "2. Every date.\n"
         "3. Every bug, ballot, incident, or version number - a wrong one "
         "sends readers to an unrelated incident.\n\n"
@@ -422,8 +429,22 @@ def generate(entry: dict, summary: str, max_retries: int = 3) -> dict:
                         # whether this forces mandated revocation" two days
                         # after the CA had answered that question on the
                         # record.
-                        "tools": [{"type": "web_search_20260209",
-                                   "name": "web_search"}],
+                        #
+                        # BOTH tools, and web_fetch is the one that matters.
+                        # web_search alone returns SNIPPETS: the 2026-08-20
+                        # drill read all three source URLs and still reported
+                        # the revocation question as open, because the answer
+                        # sits in a reply partway down a long forum thread
+                        # that no snippet surfaced. web_fetch pulls the actual
+                        # page text. It only fetches URLs already present in
+                        # the conversation, which is exactly the case here --
+                        # primary_url and provenance_urls are in the prompt.
+                        "tools": [
+                            {"type": "web_fetch_20260209", "name": "web_fetch",
+                             "max_uses": 8},
+                            {"type": "web_search_20260209",
+                             "name": "web_search"},
+                        ],
                         "messages": [{"role": "user", "content": prompt}],
                     },
                 )
