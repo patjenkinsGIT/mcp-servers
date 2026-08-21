@@ -1352,7 +1352,10 @@ def dedup_changes(changes: dict, current_data: dict | None,
     """Drop proposals already in DEADLINES, already at the current doc version,
     or previously rejected. Review flags additionally dedup against the last
     14 days of pending files (by anchor signature, since their ids are not
-    stable across runs). Returns (filtered_changes, removed[list of tuples])."""
+    stable across runs). regulatory_updates additionally consult the rejected
+    ANCHOR signatures — see keep() for why that backstop stops there and is
+    deliberately not extended to new_deadlines.
+    Returns (filtered_changes, removed[list of tuples])."""
     existing_ids, existing_sigs = set(), set()
     if current_data:
         for d in current_data.get("deadlines", []):
@@ -1369,6 +1372,38 @@ def dedup_changes(changes: dict, current_data: dict | None,
         if iid in rej["ids"] or sig in rej["signatures"]:
             removed.append((kind, iid, "previously rejected"))
             return False
+        # Anchor backstop for regulatory_updates ONLY (2026-08-21).
+        #
+        # _sig() is normalized-title|date and an EXACT match, so a rejected
+        # topic returns simply by drifting either half. On 2026-08-06 the CJEU
+        # referral did exactly that — title gained one word ("france and
+        # netherlands" vs the stored "france netherlands") and the date moved
+        # 2026-07-08 -> 2026-07-31 — and landed in regulatory_updates, where
+        # nothing consults the anchor signature that was already on file for
+        # it. Either drift alone defeats _sig(). rejected.json now carries five
+        # ids and four signatures for that one topic, which is the cost of
+        # absorbing drift instead of catching it.
+        #
+        # SCOPED TO regulatory_updates DELIBERATELY, and this asymmetry is the
+        # point rather than an oversight: anchors are COARSE (see the 2026-07-21
+        # silent-merge bug). A real future CJEU *ruling* carrying a genuine
+        # date-certain would hash to the same cjeu+nis2+transposition anchor as
+        # the rejected referral. Suppressing that out of new_deadlines would be
+        # a WORSE failure than the one this fixes, because a missed deadline is
+        # the product's whole job. regulatory_updates carries no date-certain,
+        # so a false suppression there costs a note, not a deadline.
+        #
+        # ANCHOR FORMS ONLY. _review_sig() falls back to "text:" + the first 12
+        # normalized words when an item has no anchor tokens, and rejected.json
+        # holds 8 such signatures. That fallback drifts with wording exactly
+        # like _sig() does, so admitting it here would add coarseness without
+        # adding stability. Only "anchors:" participates.
+        if kind == "regulatory":
+            asig = _review_sig(item)
+            if asig.startswith("anchors:") and asig in rej["signatures"]:
+                removed.append((kind, iid,
+                                f"previously rejected (anchor {asig})"))
+                return False
         return True
 
     for key, kind in (("new_deadlines", "deadline"),

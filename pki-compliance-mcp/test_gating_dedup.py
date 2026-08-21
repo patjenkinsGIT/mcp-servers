@@ -380,6 +380,65 @@ check("non-urgent items untouched",
       car.deescalate_speculative_urgent(
           {"needs_human_review": [{"id": "x", "description": "could constitute a problem"}]}) == [])
 
+print("== regulatory anchor backstop (2026-08-21, option C) ==")
+# The verbatim 2026-08-06 evasion: a topic rejected on 2026-07-31 came back as
+# a regulatory_update with BOTH halves of _sig() drifted — title gained one
+# word, date moved 2026-07-08 -> 2026-07-31 — while its anchor signature was
+# already on the rejected list the whole time.
+# NOTE the fixture uses the MIGRATED form. rejected.json stores the wider
+# "anchors:cjeu+nis2+transposition", but cjeu is a DOMINANT anchor, so both
+# _review_sig() at runtime and _migrate_sig() on load collapse it to
+# "anchors:cjeu". Verified against the live store on 2026-08-21: load_rejected()
+# on the droplet yields "anchors:cjeu". A fixture using the raw stored form
+# would silently never match and the test would prove nothing.
+_rej_fixture = {"ids": set(), "signatures": {"anchors:cjeu"}}
+_orig_load_rejected = car.load_rejected
+car.load_rejected = lambda: {"ids": set(_rej_fixture["ids"]),
+                             "signatures": set(_rej_fixture["signatures"])}
+try:
+    _drifted = {"id": "nis2-cjeu-referral-four-states",
+                "title": ("European Commission refers Ireland, Spain, France, and "
+                          "Netherlands to CJEU over NIS2 non-transposition"),
+                "date": "2026-07-31",
+                "description": "CJEU referral over NIS2 transposition failures"}
+    _out, _rm = car.dedup_changes({"regulatory_updates": [dict(_drifted)]}, None)
+    check("drifted regulatory_update caught by its anchor",
+          _out["regulatory_updates"] == [])
+    check("removal reason names the anchor, so it is auditable",
+          any("anchor" in r[2] and "cjeu" in r[2] for r in _rm))
+
+    # THE LOAD-BEARING NEGATIVE. A real future CJEU *ruling* with a genuine
+    # date-certain hashes to the SAME anchor. It must still reach new_deadlines:
+    # suppressing a deadline is a worse failure than the one being fixed.
+    _ruling = dict(_drifted, id="nis2-cjeu-ruling-2027",
+                   title="CJEU rules against four states over NIS2 transposition",
+                   date="2027-03-01")
+    _out2, _ = car.dedup_changes({"new_deadlines": [dict(_ruling)]}, None)
+    check("SAME anchor does NOT suppress a new_deadline",
+          len(_out2["new_deadlines"]) == 1)
+    _out3, _ = car.dedup_changes({"updated_deadlines": [dict(_ruling)]}, None)
+    check("SAME anchor does NOT suppress an updated_deadline",
+          len(_out3["updated_deadlines"]) == 1)
+
+    # text: fallbacks drift with wording exactly like _sig(), so admitting them
+    # would add coarseness without stability. Anchor forms only.
+    _rej_fixture["signatures"] = {"text:some rejected item about nothing in particular"}
+    _plain = {"id": "unrelated-reg", "title": "Some unrelated regulatory note",
+              "date": "2026-09-01", "description": "no anchor tokens here"}
+    _out4, _ = car.dedup_changes({"regulatory_updates": [dict(_plain)]}, None)
+    check("text: signatures do not participate in the backstop",
+          len(_out4["regulatory_updates"]) == 1)
+
+    # And the backstop must not swallow an unrelated regulatory item.
+    _rej_fixture["signatures"] = {"anchors:cjeu+nis2+transposition"}
+    _other = {"id": "dora-ctpp-designation", "title": "DORA CTPP designations published",
+              "date": "2026-10-01", "description": "DORA critical ICT third-party providers"}
+    _out5, _ = car.dedup_changes({"regulatory_updates": [dict(_other)]}, None)
+    check("unrelated regulatory item survives the backstop",
+          len(_out5["regulatory_updates"]) == 1)
+finally:
+    car.load_rejected = _orig_load_rejected
+
 print("== research prompts carry today's date ==")
 _today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 _p = car._dated("Search for CA/Browser Forum ballot results from the last 30 days.")
