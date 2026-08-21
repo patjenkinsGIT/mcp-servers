@@ -5,10 +5,21 @@ Daily PKI Compliance summary email.
 Composes a concise HTML summary of the two morning crons and sends it via
 Resend. Run from host crontab at 10:35 UTC (5 min after daily_doc_check.sh).
 
+EVENT-DRIVEN SINCE 2026-08-20: on a day where nothing happened, this sends
+NOTHING. See decide_send() for the exact gate. The change-day path is
+untouched — any signal at all and the email fires same-day exactly as before.
+Every run records itself in email_runs.json whether or not it sends, and
+weekly_rollup.py turns that ledger into the heartbeat that makes the silence
+trustworthy. A missing rollup, not a missing daily, is the alarm.
+
 Inputs:
   - /root/.pki-compliance-mcp/pending_updates_YYYY-MM-DD.json (from 10:00 cron)
   - /root/.pki-compliance-mcp/doc_check.log                   (from 10:30 cron)
   - /root/.pki-compliance-mcp/cron.log                        (10:00 cron logs)
+  - /root/.pki-compliance-mcp/urgent_notice_YYYY-MM-DD.json   (content_drafts.py)
+
+Outputs:
+  - /root/.pki-compliance-mcp/email_runs.json  (run ledger, read by the rollup)
 
 Env required:
   RESEND_API_KEY=re_...
@@ -17,15 +28,25 @@ Env optional:
   PKI_EMAIL_TO=patrick@fixmycert.com         (default if unset)
   PKI_EMAIL_FROM=noreply@mail.fixmycert.com  (default if unset)
 
-Exit codes: 0 ok, 1 API key missing, 2 send failed.
+Usage:
+  python3 daily_email.py                 # normal cron run; may suppress
+  python3 daily_email.py --force         # send even on a no-op day
+  python3 daily_email.py --dry-run       # print the decision + subject, no send,
+                                         # no ledger write
+  python3 daily_email.py --explain       # print the gate decision only and exit
+
+Exit codes: 0 ok (sent OR deliberately suppressed), 1 API key missing,
+2 send failed.
 """
 
+import argparse
+import hashlib
 import json
 import os
 import re
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
 
@@ -324,6 +345,11 @@ def auto_refresh_summary(log_lines: list[str]) -> dict:
     errors = [ln for ln in section if "ERROR" in ln]
     rate_limited = sum(1 for ln in section if "Rate limited" in ln)
     review_file_written = any("Review file written" in ln for ln in section)
+    # The weekly rollup must state a REAL cron timestamp, never "at unknown",
+    # so lift the one the log already carries: car.log() writes
+    # "[<iso>] PKI Compliance Auto-Refresh starting - <date>".
+    m = re.match(r"\[([^\]]+)\]", log_lines[starts[-1]])
+    started_at = m.group(1) if m else None
     # A gate skip is a deliberate no-op (no review file expected), not a failure.
     skip_line = next((ln for ln in section if "Research gate: SKIP" in ln), None)
     skip_reason = ""
@@ -331,6 +357,7 @@ def auto_refresh_summary(log_lines: list[str]) -> dict:
         skip_reason = skip_line.split("SKIP — ", 1)[1].strip()
     return {
         "ran": True,
+        "started_at": started_at,
         "errors": errors,
         "rate_limited_count": rate_limited,
         "review_file_written": review_file_written,
@@ -396,7 +423,235 @@ def read_approval(date_str: str) -> dict | None:
     return out
 
 
-def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None, drafts: list[dict] | None = None, candidates: dict | None = None) -> str:
+def read_urgent_notices(date_str: str) -> dict:
+    """Urgent items content_drafts.py notified about today, if any.
+
+    Since 2026-08-20 content_drafts.py is NOTIFY-FIRST: an urgent item
+    produces a notification (what it is, why it was flagged, source URLs) and
+    NO drafted content. Drafting is an explicit, channel-scoped trigger. This
+    reads the notice file that mode writes so the email can carry the
+    notification and the exact command that turns it into copy.
+
+    Degrades to empty on anything unreadable — a missing notice file is the
+    normal no-urgent-items case, not a fault.
+    """
+    p = DATA_DIR / f"urgent_notice_{date_str}.json"
+    try:
+        data = json.loads(p.read_text())
+    except Exception:
+        return {"items": [], "new": []}
+    items = [i for i in (data.get("items") or []) if isinstance(i, dict)]
+    return {"items": items, "new": [i for i in items if i.get("is_new")]}
+
+
+# ---------------------------------------------------------------------------
+# Event-driven send gate + run ledger (2026-08-20)
+# ---------------------------------------------------------------------------
+
+RUNS_FILE = DATA_DIR / "email_runs.json"
+RUNS_KEEP_DAYS = 120
+# The rolling backlog window outstanding_review_items() uses. The rollup ages
+# items out against the same number, so an item's age-out date in the rollup is
+# the day it actually falls out of the daily email's backlog list.
+BACKLOG_WINDOW_DAYS = 14
+
+
+def backlog_signature(outstanding: list[dict] | None) -> str:
+    """Stable hash of the backlog's COMPOSITION, not its count.
+
+    The spec is explicit that a swap at equal count must still send, so the
+    signature covers each item's identity — kind, title, date, first-seen and
+    urgency — and not the length of the list. Cheap by construction: the
+    backlog is already aggregated on every run for the email body, so this is
+    a hash over data we hold, not a second pass over the pending files.
+    Returns "" for a failed aggregation, which decide_send() treats as a
+    fault rather than as "unchanged".
+    """
+    if outstanding is None:
+        return ""
+    parts = sorted(
+        "{kind}|{title}|{date}|{first_seen}|{urgent}".format(
+            kind=o.get("kind", ""), title=o.get("title", ""),
+            date=o.get("date", ""), first_seen=o.get("first_seen", ""),
+            urgent=int(bool(o.get("urgent"))))
+        for o in outstanding
+    )
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
+
+
+def load_runs() -> dict:
+    try:
+        data = json.loads(RUNS_FILE.read_text())
+        if isinstance(data, dict) and isinstance(data.get("runs"), dict):
+            return data
+    except Exception:
+        pass
+    return {"runs": {}, "last_rollup": None}
+
+
+def save_runs(runs: dict) -> None:
+    cutoff = (datetime.now(timezone.utc).date()
+              - timedelta(days=RUNS_KEEP_DAYS)).isoformat()
+    runs["runs"] = {d: v for d, v in runs.get("runs", {}).items() if d >= cutoff}
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    RUNS_FILE.write_text(json.dumps(runs, indent=2, sort_keys=True))
+
+
+def previous_backlog_signature(runs: dict, date_str: str) -> str | None:
+    """Backlog signature from the most recent run strictly before date_str.
+
+    None means "no prior run on record" — the first run after deploy, or after
+    a gap. decide_send() sends in that case: an unknown baseline is not
+    evidence that nothing changed.
+    """
+    prior = [d for d in runs.get("runs", {}) if d < date_str]
+    for d in sorted(prior, reverse=True):
+        sig = runs["runs"][d].get("backlog_sig")
+        if sig:
+            return sig
+    return None
+
+
+def collect_signals(pending, doc_check, auto_refresh, approval, outstanding,
+                    drafts, candidates, notices, prev_backlog_sig) -> dict:
+    """Everything the gate decides on, in one auditable dict.
+
+    Split into `counts` (did something happen?) and `failures` (did something
+    break?). Suppression applies to empty days only — a day the pipeline
+    stumbled is never empty, however few items it produced.
+    """
+    proposed = flagged = 0
+    if pending and "_parse_error" not in pending:
+        proposed = (len(pending.get("new_deadlines", []))
+                    + len(pending.get("updated_deadlines", []))
+                    + len(pending.get("document_version_updates", []))
+                    + len(pending.get("regulatory_updates", [])))
+        flagged = len(pending.get("needs_human_review", []))
+
+    doc_changes = doc_check.get("changes_detected") if doc_check.get("ran") else None
+    backlog_sig = backlog_signature(outstanding)
+
+    failures = []
+    if not auto_refresh.get("ran"):
+        failures.append("10:00 research cron did not run today")
+    else:
+        if auto_refresh.get("errors"):
+            failures.append(f"research cron logged {len(auto_refresh['errors'])} ERROR line(s)")
+        if auto_refresh.get("in_progress"):
+            failures.append("research cron still running at send time")
+    if diff_parse_failure(pending):
+        failures.append("diff response unparseable — zero proposals extracted")
+    if not doc_check.get("ran"):
+        failures.append("10:30 doc-check cron did not run today")
+    else:
+        if doc_check.get("errors"):
+            failures.append(f"doc-check logged {len(doc_check['errors'])} error line(s)")
+        if doc_check.get("changes_detected") is None:
+            failures.append("doc-check ran but its change count is unavailable")
+    if pending and "_parse_error" in pending:
+        failures.append(f"pending-updates file unparseable: {pending['_parse_error']}")
+    if (pending is None and auto_refresh.get("ran")
+            and not auto_refresh.get("skipped")):
+        failures.append("research cron ran but wrote no pending file")
+    if outstanding is None:
+        failures.append("backlog aggregation failed — composition unknown")
+
+    return {
+        "counts": {
+            "proposed": proposed,
+            "flagged": flagged,
+            "doc_changes": doc_changes or 0,
+            "candidates_today": len((candidates or {}).get("today") or []),
+            "candidates_stuck": len((candidates or {}).get("stuck_pending") or []),
+            "drafts": len(drafts or []),
+            "urgent_new": len(notices.get("new") or []),
+            "backlog": len(outstanding or []),
+        },
+        "backlog_sig": backlog_sig,
+        "prev_backlog_sig": prev_backlog_sig,
+        "backlog_changed": backlog_sig != (prev_backlog_sig or ""),
+        "backlog_baseline_known": prev_backlog_sig is not None,
+        "failures": failures,
+    }
+
+
+def decide_send(signals: dict) -> tuple[bool, list[str]]:
+    """(send?, reasons). No reasons -> suppress.
+
+    The five quiet-day tests from the 2026-08-20 spec, plus two additions that
+    are the same idea applied honestly:
+
+      - content drafts / urgent notices present. An urgent item is by
+        construction also a proposal or a flag, so this is belt-and-braces,
+        but the flag is the one signal that must never be swallowed by a
+        counting bug.
+      - anything in `failures`. Silence has to mean "nothing happened", never
+        "something broke quietly" — that inversion is the whole risk of going
+        event-driven, and it is cheap to close here.
+
+    Deliberately NOT a re-fire trigger: an urgent item that is merely STILL in
+    the backlog, unchanged. It fired the day it appeared (composition changed);
+    re-nagging it daily is exactly the ritual being cut. It reappears in the
+    weekly rollup's held/awaiting-verdict section instead.
+
+    "Urgent" here is `item["urgent"]` as produced by the diff pass and held to
+    its word by car.deescalate_speculative_urgent(). There is deliberately no
+    second definition in this file.
+    """
+    c = signals["counts"]
+    reasons = []
+    if c["proposed"]:
+        reasons.append(f"{c['proposed']} proposed change(s)")
+    if c["flagged"]:
+        reasons.append(f"{c['flagged']} item(s) flagged for review")
+    if c["doc_changes"]:
+        reasons.append(f"{c['doc_changes']} document hash change(s)")
+    if c["candidates_today"]:
+        reasons.append(f"{c['candidates_today']} new content candidate(s)")
+    if c["candidates_stuck"]:
+        reasons.append(f"{c['candidates_stuck']} content candidate(s) stuck undelivered")
+    if signals["backlog_changed"]:
+        reasons.append("backlog composition changed"
+                       if signals["backlog_baseline_known"]
+                       else "no prior run on record — baseline unknown")
+    if c["urgent_new"]:
+        reasons.append(f"{c['urgent_new']} new urgent item(s) notified")
+    if c["drafts"]:
+        reasons.append(f"{c['drafts']} content draft package(s) written")
+    reasons.extend(signals["failures"])
+    return bool(reasons), reasons
+
+
+def record_run(date_str: str, signals: dict, sent: bool, reasons: list[str],
+               doc_check: dict, auto_refresh: dict) -> None:
+    """Append this run to the ledger. Written whether or not an email went out —
+    a suppressed day is exactly the day the rollup has to be able to prove ran.
+    """
+    runs = load_runs()
+    runs.setdefault("runs", {})[date_str] = {
+        "ran_at": datetime.now(timezone.utc).isoformat(),
+        "sent": sent,
+        "reasons": reasons,
+        "counts": signals["counts"],
+        "backlog_sig": signals["backlog_sig"],
+        "backlog_changed": signals["backlog_changed"],
+        "failures": signals["failures"],
+        "research": {
+            "ran": bool(auto_refresh.get("ran")),
+            "started_at": auto_refresh.get("started_at"),
+            "skipped": bool(auto_refresh.get("skipped")),
+            "skip_reason": auto_refresh.get("skip_reason", ""),
+        },
+        "doc_check": {
+            "ran": bool(doc_check.get("ran")),
+            "checked_at": doc_check.get("checked_at"),
+            "changes_detected": doc_check.get("changes_detected"),
+        },
+    }
+    save_runs(runs)
+
+
+def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None, drafts: list[dict] | None = None, candidates: dict | None = None, notices: dict | None = None) -> str:
     """Build the HTML email body. Plain-text fallback is built separately."""
     parts = []
     parts.append(f"<h2 style='margin:0 0 12px 0;font:600 18px/1.3 -apple-system,system-ui,sans-serif'>PKI Compliance daily report — {date_str}</h2>")
@@ -410,8 +665,34 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
             parts.append(f"<li><strong>{escape(o['title'])}</strong>{' — ' + escape(o['date']) if o['date'] else ''} (first seen {escape(o['first_seen'])})</li>")
         parts.append("</ul>")
 
-    # Content drafts generated for today's urgent items — drafts only,
-    # nothing is published automatically.
+    # Urgent notification — NOT drafted content (2026-08-20). What it is, why
+    # it was flagged, and its sources; drafting is a separate explicit trigger
+    # with an explicit channel set. On 2026-08-20 the auto-drafting shape
+    # produced five channels of copy off a wrong flag, of which two channels
+    # were permanently declined and the rest rewritten from scratch.
+    note_items = (notices or {}).get("items") or []
+    if note_items:
+        parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>"
+                     f"🔔 Urgent notification ({len(note_items)}) — notify-first, nothing drafted</h3>")
+    for note in note_items:
+        badge = ("🆕 " if note.get("is_new") else "↻ ")
+        parts.append("<div style='border:1px solid #fecaca;background:#fef2f2;border-radius:8px;padding:10px 12px;margin:0 0 10px 0'>")
+        parts.append(f"<p style='font:600 13px/1.4 -apple-system,system-ui,sans-serif;margin:0 0 6px 0'>{badge}{escape(str(note.get('title') or note.get('id') or '(untitled)')[:200])}</p>")
+        parts.append(f"<p style='font:12px/1.5 -apple-system,system-ui,sans-serif;color:#7f1d1d;margin:0 0 6px 0'><strong>Why flagged:</strong> {escape(str(note.get('why') or '')[:600])}</p>")
+        srcs = [u for u in (note.get("source_urls") or []) if isinstance(u, str)]
+        if srcs:
+            links = ", ".join(
+                f"<a href='{escape(u, quote=True)}' style='color:#2563eb'>source {n}</a>"
+                for n, u in enumerate(srcs, 1))
+            parts.append(f"<p style='font:12px/1.4 -apple-system,system-ui,sans-serif;margin:0 0 6px 0'>↳ {links}</p>")
+        else:
+            parts.append("<p style='font:12px/1.4 -apple-system,system-ui,sans-serif;color:#7f1d1d;margin:0 0 6px 0'>↳ no source URL on this item — verify before drafting anything.</p>")
+        parts.append("<p style='font:12px/1.4 -apple-system,system-ui,sans-serif;color:#666;margin:0'>No content has been drafted. To draft, pick the channels:<br>"
+                     f"<code>{escape(str(note.get('draft_command') or ''))}</code></p>")
+        parts.append("</div>")
+
+    # Content drafts — written only when drafting was explicitly triggered.
+    # Drafts only, nothing is published automatically.
     if drafts:
         parts.append("<h3 style='margin:18px 0 6px 0;font:600 14px/1.3 -apple-system,system-ui,sans-serif'>📝 Content drafts ready</h3>")
         for pkg in drafts:
@@ -636,8 +917,20 @@ def render_html(date_str: str, pending: dict | None, doc_check: dict, auto_refre
     return "<div style='max-width:640px'>" + "".join(parts) + "</div>"
 
 
-def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None, drafts: list[dict] | None = None, candidates: dict | None = None) -> str:
+def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refresh: dict, approval: dict | None = None, outstanding: list[dict] | None = None, drafts: list[dict] | None = None, candidates: dict | None = None, notices: dict | None = None) -> str:
     lines = [f"PKI Compliance daily report — {date_str}", "=" * 60, ""]
+
+    note_items = (notices or {}).get("items") or []
+    if note_items:
+        lines.append(f"URGENT NOTIFICATION ({len(note_items)}) — notify-first, nothing drafted:")
+        for note in note_items:
+            tag = "NEW" if note.get("is_new") else "still open"
+            lines.append(f"  - [{tag}] {str(note.get('title') or note.get('id') or '(untitled)')[:140]}")
+            lines.append(f"      why: {str(note.get('why') or '')[:300]}")
+            for u in (note.get("source_urls") or []):
+                lines.append(f"      source: {u}")
+            lines.append(f"      to draft: {note.get('draft_command') or ''}")
+        lines.append("")
 
     if candidates:
         today_cc = candidates.get("today") or []
@@ -701,17 +994,8 @@ def render_text(date_str: str, pending: dict | None, doc_check: dict, auto_refre
     return "\n".join(lines)
 
 
-def main() -> int:
-    api_key = os.environ.get("RESEND_API_KEY", "").strip()
-    if not api_key:
-        print("ERROR: RESEND_API_KEY not set", file=sys.stderr)
-        return 1
-
-    to_addr = os.environ.get("PKI_EMAIL_TO", DEFAULT_TO)
-    from_addr = os.environ.get("PKI_EMAIL_FROM", DEFAULT_FROM)
-    date_str = today_iso()
-
-    wait_for_morning_chain(date_str)
+def gather(date_str: str) -> dict:
+    """Read every input the email and the gate need. No side effects."""
     pending = read_pending_updates(date_str)
     cron_log = read_log_today(DATA_DIR / "cron.log", date_str)
     # Doc log must NOT be date-filtered: its data lines lack timestamps.
@@ -748,21 +1032,32 @@ def main() -> int:
         print(f"WARNING: content-candidates read failed: {e}", file=sys.stderr)
         candidates = None
 
-    urgent_count = sum(1 for o in (outstanding or []) if o.get("urgent"))
-    cc_today = len((candidates or {}).get("today") or [])
-    subject = f"[PKI Compliance] {date_str} — {proposed} proposed change(s)"
-    if outstanding is not None:
-        subject += f", {len(outstanding)} outstanding"
-    if drafts:
-        subject += f", {len(drafts)} content draft(s)"
+    notices = read_urgent_notices(date_str)
+
+    return {"pending": pending, "doc_check": doc_check,
+            "auto_refresh": auto_refresh, "approval": approval,
+            "outstanding": outstanding, "drafts": drafts,
+            "candidates": candidates, "notices": notices,
+            "proposed": proposed}
+
+
+def build_subject(date_str: str, g: dict) -> str:
+    urgent_count = sum(1 for o in (g["outstanding"] or []) if o.get("urgent"))
+    cc_today = len((g["candidates"] or {}).get("today") or [])
+    subject = f"[PKI Compliance] {date_str} — {g['proposed']} proposed change(s)"
+    if g["outstanding"] is not None:
+        subject += f", {len(g['outstanding'])} outstanding"
+    if g["drafts"]:
+        subject += f", {len(g['drafts'])} content draft(s)"
     if cc_today and SURFACE_CONTENT_CANDIDATES:
         subject += f", {cc_today} content candidate(s)"
     if urgent_count:
         subject = f"🚨 URGENT ({urgent_count}) — " + subject
+    return subject
 
-    html = render_html(date_str, pending, doc_check, auto_refresh, approval, outstanding, drafts, candidates)
-    text = render_text(date_str, pending, doc_check, auto_refresh, approval, outstanding, drafts, candidates)
 
+def send_email(api_key: str, from_addr: str, to_addr: str, subject: str,
+               html: str, text: str) -> int:
     try:
         r = httpx.post(
             "https://api.resend.com/emails",
@@ -786,6 +1081,80 @@ def main() -> int:
     except Exception as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="PKI Compliance daily email")
+    parser.add_argument("--force", action="store_true",
+                        help="Send even when the gate would suppress")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Decide and render, but do not send and do not "
+                             "write the run ledger")
+    parser.add_argument("--explain", action="store_true",
+                        help="Print the gate decision and exit; no send, no ledger")
+    parser.add_argument("--date", default=None,
+                        help="Report on an alternate date (replay/fixtures)")
+    parser.add_argument("--no-wait", action="store_true",
+                        help="Skip the end-of-chain poll (replay/testing)")
+    args = parser.parse_args()
+
+    date_str = args.date or today_iso()
+
+    if not (args.explain or args.dry_run or args.no_wait):
+        wait_for_morning_chain(date_str)
+
+    g = gather(date_str)
+    runs = load_runs()
+    signals = collect_signals(
+        g["pending"], g["doc_check"], g["auto_refresh"], g["approval"],
+        g["outstanding"], g["drafts"], g["candidates"], g["notices"],
+        previous_backlog_signature(runs, date_str))
+    should_send, reasons = decide_send(signals)
+
+    if args.explain:
+        print(json.dumps({"date": date_str, "would_send": should_send,
+                          "reasons": reasons, "signals": signals}, indent=2))
+        return 0
+
+    if not should_send and not args.force:
+        # The suppressed path still records itself. This line and the ledger
+        # entry are the only evidence the day was checked at all, and the
+        # weekly rollup reads the ledger to say so out loud.
+        print(f"suppressed: {date_str} — nothing happened "
+              f"(0 proposed / 0 flagged / 0 doc changes / backlog unchanged / "
+              f"0 new content candidates); no email sent")
+        if not args.dry_run:
+            record_run(date_str, signals, sent=False, reasons=[],
+                       doc_check=g["doc_check"], auto_refresh=g["auto_refresh"])
+        return 0
+
+    if args.force and not should_send:
+        reasons = ["--force (gate would have suppressed)"]
+    print(f"sending: {date_str} — " + "; ".join(reasons))
+
+    api_key = os.environ.get("RESEND_API_KEY", "").strip()
+    if not api_key:
+        print("ERROR: RESEND_API_KEY not set", file=sys.stderr)
+        return 1
+    to_addr = os.environ.get("PKI_EMAIL_TO", DEFAULT_TO)
+    from_addr = os.environ.get("PKI_EMAIL_FROM", DEFAULT_FROM)
+
+    subject = build_subject(date_str, g)
+    html = render_html(date_str, g["pending"], g["doc_check"], g["auto_refresh"],
+                       g["approval"], g["outstanding"], g["drafts"],
+                       g["candidates"], g["notices"])
+    text = render_text(date_str, g["pending"], g["doc_check"], g["auto_refresh"],
+                       g["approval"], g["outstanding"], g["drafts"],
+                       g["candidates"], g["notices"])
+
+    if args.dry_run:
+        print(f"DRY RUN — would send {subject!r} ({len(html)} bytes HTML)")
+        return 0
+
+    rc = send_email(api_key, from_addr, to_addr, subject, html, text)
+    record_run(date_str, signals, sent=(rc == 0), reasons=reasons,
+               doc_check=g["doc_check"], auto_refresh=g["auto_refresh"])
+    return rc
 
 
 if __name__ == "__main__":

@@ -120,7 +120,11 @@ DRAFTS = {
                   "body_markdown": "Kit body\n\n- Patrick"},
 }
 entry = {"kind": "deadline", "sig": car._sig(URGENT_DL), "item": URGENT_DL}
-out_dir = cd.write_drafts(tmp / "repo_drafts", "2026-07-16", DRAFTS, entry)
+# All five channels, because the assertions below cover the full file layout.
+# write_drafts() writes only the channels it is given as of 2026-08-20, so the
+# argument is what keeps this the whole-package case rather than a subset.
+out_dir = cd.write_drafts(tmp / "repo_drafts", "2026-07-16", DRAFTS, entry,
+                          list(cd.CHANNELS))
 check("dir named date-slug", out_dir.name == "2026-07-16-mass-revocation-event")
 for f in ("blog.md", "linkedin.md", "tweet.md", "youtube.md",
           "kit_broadcast.md", "meta.json"):
@@ -146,7 +150,7 @@ _checked = cd.write_drafts(
          source_check={"verified": True, "drafted_from": "sources",
                        "discrepancies": ["desc called it unresolved; "
                                          "source already answered it"]}),
-    entry)
+    entry, list(cd.CHANNELS))
 _m = json.loads((_checked / "meta.json").read_text())
 check("meta records a source-check discrepancy",
       _m["source_check"]["drafted_from"] == "sources"

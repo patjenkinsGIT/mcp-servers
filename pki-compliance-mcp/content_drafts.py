@@ -1,10 +1,35 @@
 #!/usr/bin/env python3
-"""Urgent-event content draft generator.
+"""Urgent-event notifier, and content drafter on explicit request.
+
+NOTIFY-FIRST SINCE 2026-08-20. The cron run NOTIFIES and DRAFTS NOTHING.
+Drafting is a separate, explicit trigger with an explicit channel set.
+
+Why the shape changed: an item tagged urgent:true used to generate a full
+five-channel package before any human had decided the story was worth
+telling. On 2026-08-20 the flag was wrong, the package was wrong in all five
+channels, and Pat then permanently DECLINED two channels (Kit broadcast and
+YouTube) and rewrote from scratch the two he shipped. Most of the generated
+output was discarded. Deciding first and drafting second costs nothing when
+the answer is "don't", and the ~2.6-minute source-verified package stops
+being generated speculatively.
 
 Chained in the 10:00 UTC crontab line after auto_approve.py. When today's
 research produced items tagged "urgent": true (announced mass revocation,
 distrust of a trusted root/CA, or a compliance obligation landing within ~60
-days), drafts a five-piece FixMyCert content package per item:
+days), the cron run:
+
+  - pushes an iPhone notification for items not notified before (ntfy.sh)
+  - writes urgent_notice_<date>.json — what it is, why it was flagged, its
+    source URLs, and the exact command that would draft it — which
+    daily_email.py renders as a notification block
+  - drafts NOTHING
+
+Nothing is dropped: an urgent item still reaches the review queue, the
+rolling backlog and the email exactly as before. Only the speculative
+drafting is gone.
+
+When drafting IS triggered (--draft --channels ...), it produces the
+requested subset of the five-piece FixMyCert content package:
 
   blog.md          - FixMyCert blog post (markdown, enterprise cert-team reader)
   linkedin.md      - LinkedIn post
@@ -30,18 +55,27 @@ Always writes a line to content_drafts.log - even on no-urgent-items days -
 because daily_email.py polls that file as the end-of-chain marker.
 
 Usage:
-  python3 content_drafts.py                  # normal cron run (today)
+  python3 content_drafts.py                  # cron run: notify only, draft nothing
   python3 content_drafts.py --date YYYY-MM-DD
-  python3 content_drafts.py --dry-run        # generate to DATA_DIR/drafts_preview,
-                                             # no git, no state update
+  python3 content_drafts.py --list           # show today's urgent items + their
+                                             # selectors, no push, no state write
+
+  # Drafting — always explicit, always channel-scoped:
+  python3 content_drafts.py --draft --channels blog,tweet
+  python3 content_drafts.py --draft --channels all --item letsencrypt
+  python3 content_drafts.py --draft --channels linkedin --dry-run
+
   python3 content_drafts.py --pending-file X # read urgent items from an
                                              # alternate pending file (fire drills)
 
-Env: ANTHROPIC_API_KEY required to draft (a no-urgent-items run exits clean
-without it). PKI_REPO_PATH optional override, same default as the pipeline.
-NTFY_TOPIC optional: when set, new urgent items trigger an iPhone push via
-ntfy.sh (sent as soon as items are detected, before drafting, so the alert
-lands even if generation fails; skipped on --dry-run).
+Channels: blog, linkedin, tweet, kit, youtube — or "all". --channels is
+REQUIRED with --draft and has no default: assuming all five is the behaviour
+that produced four discarded channels on 2026-08-20.
+
+Env: ANTHROPIC_API_KEY required to draft (a notify-only run does not need it).
+PKI_REPO_PATH optional override, same default as the pipeline. NTFY_TOPIC
+optional: when set, newly-seen urgent items trigger an iPhone push via
+ntfy.sh (skipped on --dry-run and --list).
 """
 
 import argparse
@@ -61,10 +95,23 @@ import compliance_auto_refresh as car
 DATA_DIR = car.DATA_DIR
 LOG_FILE = DATA_DIR / "content_drafts.log"
 STATE_FILE = DATA_DIR / "content_drafted.json"
+# Separate ledger from STATE_FILE on purpose: "we have told Pat about this"
+# and "we have drafted copy for this" are now different facts, and an item can
+# sit in the first state for days without ever entering the second.
+NOTIFIED_FILE = DATA_DIR / "content_notified.json"
 REPO = Path(os.environ.get("PKI_REPO_PATH", car.PKI_REPO_PATH))
 DRAFTS_DIRNAME = "content_drafts"
 MODEL = car.MODEL
 MAX_DRAFTS_PER_RUN = 3  # an event wave should not turn into an API bill
+
+# channel -> (output filename, the JSON key the model returns it under)
+CHANNELS = {
+    "blog": ("blog.md", "blog_markdown"),
+    "linkedin": ("linkedin.md", "linkedin"),
+    "tweet": ("tweet.md", "tweet"),
+    "kit": ("kit_broadcast.md", "kit_email"),
+    "youtube": ("youtube.md", "youtube"),
+}
 
 
 def log(message: str):
@@ -81,26 +128,53 @@ def log(message: str):
 # ---------------------------------------------------------------------------
 
 
-def load_state() -> dict:
+def _load_ledger(path: Path) -> dict:
     try:
-        return json.loads(STATE_FILE.read_text())
+        data = json.loads(path.read_text())
+        if isinstance(data, dict) and isinstance(data.get("signatures"), dict):
+            return data
     except Exception:
-        return {"signatures": {}}
+        pass
+    return {"signatures": {}}
+
+
+def load_state() -> dict:
+    return _load_ledger(STATE_FILE)
 
 
 def save_state(state: dict):
     STATE_FILE.write_text(json.dumps(state, indent=2))
 
 
-def collect_urgent(pending: dict) -> list[dict]:
+def load_notified() -> dict:
+    return _load_ledger(NOTIFIED_FILE)
+
+
+def save_notified(state: dict):
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    NOTIFIED_FILE.write_text(json.dumps(state, indent=2))
+
+
+def collect_urgent(pending: dict, skip_drafted: bool = True) -> list[dict]:
     """Pull urgent-tagged items out of a pending-updates dict.
 
-    Returns [{"kind", "sig", "item"}] minus rejected and already-drafted
-    items, using the pipeline's signature machinery so "same item" means
-    exactly what it means to the email backlog and dedup pass.
+    Returns [{"kind", "sig", "item"}] minus rejected items, using the
+    pipeline's signature machinery so "same item" means exactly what it means
+    to the email backlog and dedup pass.
+
+    `urgent` here is the flag the diff pass assigns under the three tests in
+    DIFF_SYSTEM_PROMPT, held to the word "announced" by
+    car.deescalate_speculative_urgent(). This module deliberately defines no
+    second notion of urgency — a parallel definition is how the 2026-08-20
+    class of bug comes back.
+
+    skip_drafted=True (the notify path and the old default) also drops items
+    already in content_drafted.json. The explicit --draft path passes False:
+    when a human asks for copy, "nothing happened because we drafted this
+    once before" is a worse failure than regenerating it.
     """
     rejected = car.load_rejected()
-    drafted = set(load_state().get("signatures", {}))
+    drafted = set(load_state().get("signatures", {})) if skip_drafted else set()
     out = []
     for key, kind in (("new_deadlines", "deadline"),
                       ("updated_deadlines", "update"),
@@ -123,6 +197,63 @@ def collect_urgent(pending: dict) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Notification (the default path)
+# ---------------------------------------------------------------------------
+
+
+def _item_sources(item: dict) -> list[str]:
+    urls = []
+    for u in [item.get("primary_url")] + list(item.get("provenance_urls") or []):
+        if isinstance(u, str) and u.strip() and u not in urls:
+            urls.append(u.strip())
+    return urls[:5]
+
+
+def _selector(entry: dict) -> str:
+    """Short, stable, greppable handle for --item. The id when there is one,
+    else the signature — both are exact-matchable and neither changes between
+    the notice and the draft run."""
+    return str(entry["item"].get("id") or entry["sig"])
+
+
+def build_notice(entry: dict, date_str: str, is_new: bool) -> dict:
+    """One notification record: what it is, why it was flagged, its sources,
+    and the command that turns it into copy. No drafted content."""
+    item = entry["item"]
+    why = (item.get("description") or item.get("reason") or item.get("impact")
+           or item.get("update") or "(no description on the item)")
+    return {
+        "signature": entry["sig"],
+        "selector": _selector(entry),
+        "kind": entry["kind"],
+        "id": item.get("id") or "",
+        "title": item.get("title") or item.get("id") or item.get("topic") or "",
+        "date": item.get("date") or "",
+        "why": str(why),
+        "source_urls": _item_sources(item),
+        "is_new": is_new,
+        "first_notified": date_str,
+        "draft_command": (
+            "cd /opt/mcp-servers/pki-compliance-mcp && python3 content_drafts.py "
+            f"--draft --channels <blog|linkedin|tweet|kit|youtube|all> "
+            f"--date {date_str} --item {_selector(entry)}"),
+    }
+
+
+def write_notice_file(date_str: str, notices: list[dict]) -> Path:
+    """Persist the notifications daily_email.py renders. Written even when the
+    list is empty so a reader can tell "checked, none" from "never ran"."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    p = DATA_DIR / f"urgent_notice_{date_str}.json"
+    p.write_text(json.dumps({
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "notify-only — no content drafted",
+        "items": notices,
+    }, indent=2))
+    return p
+
+
+# ---------------------------------------------------------------------------
 # Push notification (ntfy.sh)
 # ---------------------------------------------------------------------------
 
@@ -131,7 +262,7 @@ def notify_urgent(urgent: list[dict]) -> None:
     """Push an iPhone notification for new urgent items via ntfy.sh.
 
     No-op unless NTFY_TOPIC is set. Best effort: a push failure must never
-    block drafting, so errors are logged and swallowed.
+    block the rest of the run, so errors are logged and swallowed.
     """
     topic = os.environ.get("NTFY_TOPIC", "").strip()
     if not topic:
@@ -140,8 +271,8 @@ def notify_urgent(urgent: list[dict]) -> None:
         f"• {(e['item'].get('title') or e['item'].get('id') or '(untitled)')[:120]}"
         for e in urgent
     )
-    body = (f"{titles}\n\nContent drafts are being generated - "
-            "check the morning email / repo.")
+    body = (f"{titles}\n\nNothing has been drafted. Review it in the morning "
+            "email, then choose channels if it is worth telling.")
     try:
         httpx.post(
             f"https://ntfy.sh/{topic}",
@@ -366,14 +497,37 @@ def _extract_json(text: str) -> dict:
     return best
 
 
-def generate(entry: dict, summary: str, max_retries: int = 3) -> dict:
-    """One API call -> the full four-piece package as a dict."""
+def _channel_instruction(channels: list[str]) -> str:
+    """Tell the model which channels to produce. Requested explicitly on every
+    call — there is no all-five default anywhere in this path."""
+    wanted = ", ".join(f"`{CHANNELS[c][1]}`" for c in channels)
+    skipped = sorted({k for _, k in CHANNELS.values()}
+                     - {CHANNELS[c][1] for c in channels})
+    lines = [
+        "## Channels requested\n",
+        f"Draft ONLY these channels: {wanted}.\n",
+        'Always include "slug", "requires_reader_action" and "source_check" - '
+        "they are not channels, they are the record of what you decided and "
+        "what you verified.\n",
+    ]
+    if skipped:
+        lines.append(
+            "OMIT these keys from the JSON entirely - do not draft them, do "
+            "not emit them empty, do not apologise for their absence: "
+            + ", ".join(f"`{k}`" for k in skipped) + ".\n")
+    return "".join(lines) + "\n"
+
+
+def generate(entry: dict, summary: str, channels: list[str],
+             max_retries: int = 3) -> dict:
+    """One API call -> the requested channels as a dict."""
     if not car.ANTHROPIC_API_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY environment variable is not set")
     prompt = (
         f"## Urgent item ({entry['kind']})\n\n"
         f"{json.dumps(entry['item'], indent=2)}\n\n"
         f"## Research-run summary (context)\n\n{summary or '(none)'}\n\n"
+        + _channel_instruction(channels) +
         "## Source verification - DO THIS FIRST\n\n"
         "Before drafting anything, USE web_fetch TO READ THE FULL TEXT of "
         "the item's own sources: `primary_url` first, then each entry in "
@@ -481,40 +635,47 @@ def slugify(s: str) -> str:
     return s[:60] or "urgent-item"
 
 
-def write_drafts(base_dir: Path, date_str: str, drafts: dict, entry: dict) -> Path:
+def write_drafts(base_dir: Path, date_str: str, drafts: dict, entry: dict,
+                 channels: list[str]) -> Path:
+    """Write ONLY the requested channels. A channel nobody asked for produces
+    no file — the point of the 2026-08-20 change is that unwanted copy is not
+    generated, so it must not be written either."""
     slug = slugify(drafts.get("slug") or entry["item"].get("title")
                    or entry["item"].get("id") or "urgent-item")
     out_dir = base_dir / f"{date_str}-{slug}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    yt = drafts.get("youtube") or {}
-    yt_md = "\n\n".join(
-        f"## {label}\n\n{yt.get(key, '(missing)')}"
-        for label, key in (
-            ("Title", "title"),
-            ("NotebookLM audio prompt", "notebooklm_audio_prompt"),
-            ("NotebookLM visual prompt", "notebooklm_visual_prompt"),
-            ("Description", "description"),
-            ("Pinned comment", "pinned_comment"),
-            ("Thumbnail prompt", "thumbnail_prompt"),
+    if "youtube" in channels:
+        yt = drafts.get("youtube") or {}
+        yt_md = "\n\n".join(
+            f"## {label}\n\n{yt.get(key, '(missing)')}"
+            for label, key in (
+                ("Title", "title"),
+                ("NotebookLM audio prompt", "notebooklm_audio_prompt"),
+                ("NotebookLM visual prompt", "notebooklm_visual_prompt"),
+                ("Description", "description"),
+                ("Pinned comment", "pinned_comment"),
+                ("Thumbnail prompt", "thumbnail_prompt"),
+            )
         )
-    )
-    kit = drafts.get("kit_email") or {}
-    kit_md = (
-        "<!-- OPERATOR NOTES - do not send as-is:\n"
-        "     audience: FixMyCert brand ONLY (brand:fmc, tag 19302998) - NOT the full list\n"
-        "     sender:   Patrick from FixMyCert <patrick@fixmycert.com> (account default)\n"
-        "     This is a DRAFT. Create in Kit as a draft broadcast; never auto-send. -->\n\n"
-        f"## Subject\n\n{kit.get('subject', '(missing)')}\n\n"
-        f"## Preview text\n\n{kit.get('preview_text', '(missing)')}\n\n"
-        f"## Body\n\n{kit.get('body_markdown', '(missing)')}"
-    )
-    (out_dir / "blog.md").write_text(drafts.get("blog_markdown", "(missing)") + "\n")
-    (out_dir / "linkedin.md").write_text(drafts.get("linkedin", "(missing)") + "\n")
-    (out_dir / "tweet.md").write_text(drafts.get("tweet", "(missing)") + "\n")
-    (out_dir / "kit_broadcast.md").write_text(kit_md + "\n")
-    (out_dir / "youtube.md").write_text(
-        f"# YouTube publish package - {yt.get('title', slug)}\n\n{yt_md}\n")
+        (out_dir / "youtube.md").write_text(
+            f"# YouTube publish package - {yt.get('title', slug)}\n\n{yt_md}\n")
+    if "kit" in channels:
+        kit = drafts.get("kit_email") or {}
+        kit_md = (
+            "<!-- OPERATOR NOTES - do not send as-is:\n"
+            "     audience: FixMyCert brand ONLY (brand:fmc, tag 19302998) - NOT the full list\n"
+            "     sender:   Patrick from FixMyCert <patrick@fixmycert.com> (account default)\n"
+            "     This is a DRAFT. Create in Kit as a draft broadcast; never auto-send. -->\n\n"
+            f"## Subject\n\n{kit.get('subject', '(missing)')}\n\n"
+            f"## Preview text\n\n{kit.get('preview_text', '(missing)')}\n\n"
+            f"## Body\n\n{kit.get('body_markdown', '(missing)')}"
+        )
+        (out_dir / "kit_broadcast.md").write_text(kit_md + "\n")
+    for name in ("blog", "linkedin", "tweet"):
+        if name in channels:
+            filename, key = CHANNELS[name]
+            (out_dir / filename).write_text(drafts.get(key, "(missing)") + "\n")
     # source_check and requires_reader_action are persisted so a drafter that
     # caught a stale or wrong source_item leaves a visible record instead of
     # silently writing better copy. A non-empty `discrepancies` means the
@@ -526,6 +687,7 @@ def write_drafts(base_dir: Path, date_str: str, drafts: dict, entry: dict) -> Pa
         "kind": entry["kind"],
         "signature": entry["sig"],
         "source_item": entry["item"],
+        "channels": channels,
         "requires_reader_action": drafts.get("requires_reader_action"),
         "source_check": drafts.get("source_check") or {"verified": None},
         "status": "draft - not published",
@@ -561,37 +723,93 @@ def car_run(cmd: list) -> subprocess.CompletedProcess:
 # ---------------------------------------------------------------------------
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--date", default=datetime.now(timezone.utc).strftime("%Y-%m-%d"))
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Write to DATA_DIR/drafts_preview; no git, no state update")
-    parser.add_argument("--pending-file", default=None,
-                        help="Alternate pending-updates JSON (fire drills)")
-    args = parser.parse_args()
+def parse_channels(raw: str) -> list[str]:
+    """"blog,tweet" or "all" -> ordered channel list. Raises on anything else."""
+    names = [c.strip().lower() for c in raw.split(",") if c.strip()]
+    if names == ["all"]:
+        return list(CHANNELS)
+    unknown = [c for c in names if c not in CHANNELS]
+    if unknown:
+        raise ValueError(f"unknown channel(s): {', '.join(unknown)}. "
+                         f"Valid: {', '.join(CHANNELS)}, or 'all'")
+    if not names:
+        raise ValueError("no channels given")
+    return [c for c in CHANNELS if c in names]
 
+
+def _load_pending(args) -> tuple[dict | None, Path]:
     pending_path = (Path(args.pending_file) if args.pending_file
                     else DATA_DIR / f"pending_updates_{args.date}.json")
     if not pending_path.exists():
-        log(f"content_drafts: no pending file for {args.date} - nothing to draft")
-        return 0
+        return None, pending_path
     try:
-        pending = json.loads(pending_path.read_text())
+        return json.loads(pending_path.read_text()), pending_path
     except Exception as e:
-        log(f"content_drafts: pending file unreadable ({e}) - nothing to draft")
-        return 0
+        log(f"content_drafts: pending file unreadable ({e})")
+        return None, pending_path
 
+
+def run_notify(args, pending: dict) -> int:
+    """The cron path: notify, record, draft nothing."""
     urgent = collect_urgent(pending)
-    if not urgent:
-        log(f"content_drafts: no new urgent items for {args.date} - nothing to draft")
-        return 0
+    notified = load_notified()
+    seen = set(notified.get("signatures", {}))
+    notices = [build_notice(e, args.date, is_new=e["sig"] not in seen)
+               for e in urgent]
+    fresh = [e for e in urgent if e["sig"] not in seen]
 
     if not args.dry_run:
-        notify_urgent(urgent)
+        write_notice_file(args.date, notices)
+
+    if not urgent:
+        log(f"content_drafts: no urgent items for {args.date} - "
+            "nothing to notify, nothing drafted")
+        return 0
+
+    if fresh and not args.dry_run:
+        notify_urgent(fresh)
+        for e in fresh:
+            notified.setdefault("signatures", {})[e["sig"]] = args.date
+        save_notified(notified)
+
+    for n in notices:
+        log(f"content_drafts: URGENT {'(new)' if n['is_new'] else '(already notified)'} "
+            f"[{n['kind']}] {n['title'][:80]!r} selector={n['selector']} "
+            f"sources={len(n['source_urls'])}")
+    log(f"content_drafts: notified {len(fresh)} new of {len(urgent)} urgent "
+        f"item(s) for {args.date}; NOTHING DRAFTED - drafting is an explicit "
+        "trigger (--draft --channels ...)")
+    return 0
+
+
+def run_draft(args, pending: dict, channels: list[str]) -> int:
+    """The explicit path: draft the requested channels for the selected items."""
+    # skip_drafted=False: an explicit human request must not silently no-op
+    # because the same item was drafted once before.
+    urgent = collect_urgent(pending, skip_drafted=False)
+    if args.item:
+        needle = args.item.lower()
+        urgent = [e for e in urgent
+                  if needle in _selector(e).lower()
+                  or needle in str(e["item"].get("title") or "").lower()
+                  or needle in e["sig"].lower()]
+        if not urgent:
+            log(f"content_drafts: --item {args.item!r} matched no urgent item "
+                f"in {args.date}; run --list to see the selectors")
+            return 1
+    if not urgent:
+        log(f"content_drafts: no urgent items for {args.date} - nothing to draft")
+        return 1
+
+    already = set(load_state().get("signatures", {}))
+    for e in urgent:
+        if e["sig"] in already:
+            log(f"content_drafts: NOTE - {_selector(e)} was drafted before; "
+                "re-drafting on explicit request (files will be overwritten)")
 
     if len(urgent) > MAX_DRAFTS_PER_RUN:
         log(f"content_drafts: {len(urgent)} urgent items, capping at "
-            f"{MAX_DRAFTS_PER_RUN}; the rest draft on later runs")
+            f"{MAX_DRAFTS_PER_RUN}; re-run with --item to pick the rest")
         urgent = urgent[:MAX_DRAFTS_PER_RUN]
 
     base_dir = (DATA_DIR / "drafts_preview" if args.dry_run
@@ -602,16 +820,21 @@ def main() -> int:
     for entry in urgent:
         title = (entry["item"].get("title") or entry["item"].get("id")
                  or "(untitled)")[:80]
-        log(f"content_drafts: drafting package for [{entry['kind']}] {title}")
+        log(f"content_drafts: drafting [{','.join(channels)}] for "
+            f"[{entry['kind']}] {title}")
         try:
-            drafts = generate(entry, summary)
+            drafts = generate(entry, summary, channels)
         except Exception as e:
             log(f"content_drafts: GENERATION FAILED for {title} - {e}")
             continue
-        out_dir = write_drafts(base_dir, args.date, drafts, entry)
+        out_dir = write_drafts(base_dir, args.date, drafts, entry, channels)
         written.append(out_dir)
         state.setdefault("signatures", {})[entry["sig"]] = args.date
-        log(f"content_drafts: wrote {out_dir}")
+        sc = drafts.get("source_check") or {}
+        log(f"content_drafts: wrote {out_dir} "
+            f"(requires_reader_action={drafts.get('requires_reader_action')}, "
+            f"source_check.verified={sc.get('verified')}, "
+            f"discrepancies={len(sc.get('discrepancies') or [])})")
 
     if not written:
         log("content_drafts: all generations failed - nothing written")
@@ -630,6 +853,62 @@ def main() -> int:
         log(f"content_drafts: {len(written)} package(s) committed and pushed")
     save_state(state)
     return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--date", default=datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    parser.add_argument("--draft", action="store_true",
+                        help="Actually draft content (default is notify only)")
+    parser.add_argument("--channels", default=None,
+                        help="Comma-separated: blog,linkedin,tweet,kit,youtube "
+                             "or 'all'. REQUIRED with --draft; no default.")
+    parser.add_argument("--item", default=None,
+                        help="Draft only the urgent item whose id/signature/title "
+                             "contains this string (see --list)")
+    parser.add_argument("--list", action="store_true",
+                        help="List today's urgent items and their selectors, then exit")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Write to DATA_DIR/drafts_preview; no git, no state update")
+    parser.add_argument("--pending-file", default=None,
+                        help="Alternate pending-updates JSON (fire drills)")
+    args = parser.parse_args()
+
+    if args.channels and not args.draft:
+        parser.error("--channels only applies to --draft")
+
+    pending, pending_path = _load_pending(args)
+    if pending is None:
+        # Still an end-of-chain log line: daily_email.py polls this file.
+        log(f"content_drafts: no usable pending file at {pending_path} "
+            f"for {args.date} - nothing to notify or draft")
+        return 0
+
+    if args.list:
+        urgent = collect_urgent(pending, skip_drafted=False)
+        if not urgent:
+            log(f"content_drafts: no urgent items for {args.date}")
+            return 0
+        for e in urgent:
+            n = build_notice(e, args.date, is_new=False)
+            print(f"{n['selector']}\t[{n['kind']}]\t{n['title'][:70]}\t"
+                  f"{len(n['source_urls'])} source(s)")
+        return 0
+
+    if not args.draft:
+        return run_notify(args, pending)
+
+    # Drafting is explicit AND channel-scoped. Refusing to default here is the
+    # fix: assuming all five is what produced four discarded channels on
+    # 2026-08-20.
+    if not args.channels:
+        parser.error("--draft requires --channels (e.g. --channels blog,tweet, "
+                     "or --channels all). There is deliberately no default.")
+    try:
+        channels = parse_channels(args.channels)
+    except ValueError as e:
+        parser.error(str(e))
+    return run_draft(args, pending, channels)
 
 
 if __name__ == "__main__":
