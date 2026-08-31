@@ -446,5 +446,36 @@ check("today's date injected", _today in _p)
 check("original query preserved", "last 30 days" in _p)
 check("latest-state instruction present", "LATEST state" in _p or "latest state" in _p.lower())
 
+print("== NetSec ballot anchors (2026-08-31) ==")
+# NS-010 re-flagged past its own 2026-07-31 rejection twice (08-22, 08-29),
+# each time under a new id AND new wording. _REVIEW_ANCHOR_RE had families for
+# sc/csc/smc/cscwg but none for NetSec, so every NS ballot fell through to the
+# "text:" first-12-words fallback — which a rewording defeats by construction.
+# These lock the anchor form; without them the regex silently regresses to a
+# fallback signature and the re-flagging resumes with no visible symptom.
+_ns_a = {"id": "cabf-ns010-ncssr-restructure",
+         "title": "Ballot NS-010: NCSSR Restructure - voting outcome unconfirmed"}
+_ns_b = {"id": "cabf-ns-010-status-unconfirmed",
+         "title": "Ballot NS-010 (NetSec restructuring) - voting status unconfirmed"}
+_ns_c = {"id": "cabf-netsec-ns010-outcome-pending",
+         "title": "NetSec Ballot NS-010 outcome still pending"}
+check("NS-010 yields an anchor signature, not a text: fallback",
+      car._review_sig(_ns_a).startswith("anchors:"))
+check("all three NS-010 wordings collapse to ONE signature",
+      car._review_sig(_ns_a) == car._review_sig(_ns_b) == car._review_sig(_ns_c))
+check("zero-padding folded like the sc/smc families",
+      car._canon_anchor("NS-010") == car._canon_anchor("NS 10") == "ns10")
+check("version suffix folded (NS-008v3)", car._canon_anchor("NS-008v3") == "ns8")
+# The near-miss alternatives: both start "ns" and must NOT be swallowed.
+check("NSPM-12 not shadowed by the ns pattern",
+      car._review_anchors({"title": "NSPM-12 migration"}) == {"nspm12"})
+check("NIS2 not shadowed by the ns pattern",
+      car._review_anchors({"title": "NIS2 transposition"}) == {"nis2", "transposition"})
+check("no false anchor on 'DNS 2026'", car._review_anchors({"title": "DNS 2026 review"}) == set())
+# Distinct NetSec ballots must stay distinct — an over-collapsing anchor would
+# suppress a real flag as "previously rejected", the dangerous direction.
+check("NS-003 and NS-010 are different anchors",
+      car._review_anchors({"title": "NS-003"}) != car._review_anchors({"title": "NS-010"}))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 raise SystemExit(1 if FAIL else 0)

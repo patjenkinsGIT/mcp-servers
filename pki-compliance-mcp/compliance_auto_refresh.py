@@ -732,6 +732,7 @@ _REVIEW_ANCHOR_RE = re.compile(
     r"sc[ -]?\d{2,4}(?:v\d+)?"       # server cert ballots: SC087v2, SC101, SC0101v2
     r"|csc[ -]?\d+(?:v\d+)?"         # code signing ballots: CSC-32
     r"|smc[ -]?\d{2,4}(?:v\d+)?"     # S/MIME ballots: SMC017v2
+    r"|ns[ -]?\d{2,4}(?:v\d+)?"      # NetSec ballots: NS-010, NS-008v3
     r"|cscwg[ -]?\d+"
     r"|nis[ -]?2"
     r"|dora"
@@ -777,7 +778,7 @@ def _canon_anchor(a: str) -> str:
     (SC101 / SC0101v2 / SC0101 are the same ballot family)."""
     a = re.sub(r"[\s-]", "", a.lower())
     a = _ANCHOR_CANON.get(a, a)
-    b = re.match(r"^(sc|csc|smc|cscwg)0*(\d+)(?:v\d+)?$", a)
+    b = re.match(r"^(sc|csc|smc|cscwg|ns)0*(\d+)(?:v\d+)?$", a)
     if b:
         a = b.group(1) + b.group(2)
     return a
