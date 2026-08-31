@@ -1277,7 +1277,12 @@ def reject_ids(ids: list[str], days: int = 30) -> int:
     consulted only the newest file — an empty parse-failure stub — persisted
     as bare ids, and the next research run's freshly-invented ids sailed
     straight past them.) A bare id is still recorded, but only a signature
-    survives id churn, so unmapped ids get a loud warning."""
+    survives id churn, so unmapped ids get a loud warning.
+
+    `days` is settable from the CLI as --reject-days (2026-08-31). Widen it
+    when the flag being rejected is OLDER than the default 30d: NS-010's first
+    flag sat in a 31-day-old pending file, so at the default it mapped to no
+    signature at all and the rejection would not have survived a rewording."""
     raw = {"ids": [], "signatures": []}
     if REJECTED_FILE.exists():
         raw = json.loads(REJECTED_FILE.read_text())
@@ -1334,7 +1339,8 @@ def reject_ids(ids: list[str], days: int = 30) -> int:
         else:
             log(f"WARNING: no signature found for {iid!r} in the last {days}d of "
                 f"pending files — id-only rejection will not suppress re-worded "
-                f"re-proposals of the same topic")
+                f"re-proposals of the same topic. If the flag is simply older than "
+                f"{days}d, re-run with --reject-days N to widen the window")
         if iid in provmap:
             snap = dict(provmap[iid])
             snap["signature"] = sigmap.get(iid)
@@ -1452,6 +1458,11 @@ def main():
     parser.add_argument("--query-only", action="store_true", help="Run research queries only")
     parser.add_argument("--force", action="store_true", help="Bypass the change gate and research now")
     parser.add_argument("--reject", nargs="+", metavar="ID", help="Mark item id(s) as rejected so they stop recurring, then exit")
+    parser.add_argument("--reject-days", type=int, default=30, metavar="N",
+                        help="Days of pending files to search for the rejected ids' signatures "
+                             "(default 30). Widen when a flag has aged past the default window — "
+                             "an id whose only pending file is older than N maps to NO signature, "
+                             "and an id-only rejection does not survive a rewording.")
     parser.add_argument("--list-rejected", action="store_true", help="Print the persisted rejected list and exit")
     args = parser.parse_args()
 
@@ -1464,8 +1475,11 @@ def main():
         print(json.dumps({"ids": sorted(rej["ids"]), "signatures": sorted(rej["signatures"])}, indent=2))
         return
     if args.reject:
-        total = reject_ids(args.reject)
-        log(f"Rejected {len(args.reject)} item(s); {total} total on the rejected list")
+        if args.reject_days < 1:
+            parser.error("--reject-days must be at least 1")
+        total = reject_ids(args.reject, days=args.reject_days)
+        log(f"Rejected {len(args.reject)} item(s) (signature window {args.reject_days}d); "
+            f"{total} total on the rejected list")
         return
 
     log(f"PKI Compliance Auto-Refresh starting - {today}")

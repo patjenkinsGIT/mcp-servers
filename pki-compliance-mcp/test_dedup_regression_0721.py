@@ -138,6 +138,39 @@ car.reject_ids(["ancient-flag"])
 saved = json.loads(car.REJECTED_FILE.read_text())
 check("files outside the window are not consulted", saved["signatures"] == [])
 
+# Widening the window (--reject-days, added 2026-08-31). NS-010's first flag
+# was 31 days old, so the default 30d mapped it to NO signature and rejecting
+# it recorded a bare id — which does not survive a rewording, the whole failure
+# this ledger exists to prevent. The flag is the supported way out; these pin
+# that the default stays 30 and that widening actually reaches the older file.
+d = with_tmp()
+(d / f"pending_updates_{day(35)}.json").write_text(json.dumps({
+    "needs_human_review": [{"id": "aged-out-flag", "description": "Ballot NS-010 restructure"}]}))
+car.reject_ids(["aged-out-flag"])
+saved = json.loads(car.REJECTED_FILE.read_text())
+check("35-day-old flag maps to nothing at the default window", saved["signatures"] == [])
+check("...but the bare id is still recorded", "aged-out-flag" in saved["ids"])
+
+car.reject_ids(["aged-out-flag"], days=45)
+saved = json.loads(car.REJECTED_FILE.read_text())
+check("widened window reaches the older file and captures the signature",
+      "anchors:ns10" in saved["signatures"])
+check("widening does not duplicate the id", saved["ids"].count("aged-out-flag") == 1)
+# The fixture item carries no provenance_urls, so no snapshot is owed — a
+# widened window must not invent one.
+check("no provenance snapshot when the item has no urls",
+      "aged-out-flag" not in saved.get("provenance", {}))
+
+# Provenance IS retained when the item has urls and the window reaches it.
+d = with_tmp()
+(d / f"pending_updates_{day(35)}.json").write_text(json.dumps({
+    "needs_human_review": [{"id": "aged-flag-with-urls", "description": "Ballot NS-010 restructure",
+                            "provenance_urls": ["https://cabforum.org/working-groups/netsec/ballots/"]}]}))
+car.reject_ids(["aged-flag-with-urls"], days=45)
+saved = json.loads(car.REJECTED_FILE.read_text())
+check("widened rejection snapshots provenance for an aged item",
+      saved.get("provenance", {}).get("aged-flag-with-urls", {}).get("signature") == "anchors:ns10")
+
 print("== end-to-end replay of the six-item incident ==")
 d = with_tmp()
 TODAY = day(0)
