@@ -273,7 +273,12 @@ check("auto_approve.classify never sees content_candidates (no review queue entr
 print("== rejection-path provenance retention (Part B) ==")
 
 d = with_tmp()
-pending_file = d / f"pending_updates_{TODAY}.json"
+# Dated from the real clock, NOT from TODAY: reject_ids() windows pending files
+# against datetime.now(), so a fixed date here ages out of its 30-day window.
+# It did, on 2026-09-07 (30 days after TODAY), and these checks went red.
+from datetime import datetime, timezone
+_real_today = datetime.now(timezone.utc).date().isoformat()
+pending_file = d / f"pending_updates_{_real_today}.json"
 pending_file.write_text(json.dumps({
     "needs_human_review": [
         {"id": "nis2-czechia-followup",
