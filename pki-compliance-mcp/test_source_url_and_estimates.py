@@ -128,6 +128,7 @@ ONGOING_IDS = {
     "dora-effective", "nis2-germany-bsi", "nis2-italy-audit",
     "nis2-czechia-effective", "nis2-sweden-effective",
     "nis2-netherlands-cbw", "apple-policy-v2-subca-eku",
+    "microsoft-august-2026-ctl-notbefore",
 }
 unified = pki.get_all_deadlines_unified()
 by_id = {d["id"]: d for d in unified}
